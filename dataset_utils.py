@@ -139,7 +139,7 @@ def get_dataloader(split: str, batch_size: int) -> DataLoader:
 
     if split == "train":
         transform = train_transform
-        shuffle = True 
+        shuffle = True
     elif split == "val":
         transform = val_transform
         shuffle = False
