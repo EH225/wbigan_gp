@@ -110,7 +110,7 @@ class Generator(nn.Module):
             embedding vectors used to represent each class. The default is 128.
         """
         super().__init__()
-        self.name = "Generator"
+        self.name = "generator"
         self.z_dim = z_dim
 
         # This fully connected layer maps from the latent noise vector to a larger tensor that

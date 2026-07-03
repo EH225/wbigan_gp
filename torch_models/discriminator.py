@@ -41,7 +41,7 @@ class Discriminator(nn.Module):
             embedding vectors used to represent each class. The default is 128.
         """
         super().__init__()
-        self.name = "Discriminator"
+        self.name = "discriminator"
         self.z_dim = z_dim
 
         # An initial convolution before the residual down-sampling conv blocks
