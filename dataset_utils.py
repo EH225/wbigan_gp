@@ -71,7 +71,8 @@ class OxfordPetsDataset(Dataset):
         self.meta_df = self.meta_df.loc[self.meta_df["split"] == split, :]  # Subset for the split
         self.transform = transform
         self.image_names = self.meta_df["image_name"].tolist()
-        self.class_id = {row["image_name"]: row["class_id"] for _, row in self.meta_df.iterrows()}
+        # Create a dictionary of class_id value [0, 36] for every image name for quick retrival
+        self.class_id = {row["image_name"]: row["class_id"] - 1 for _, row in self.meta_df.iterrows()}
 
     def __len__(self):
         """
