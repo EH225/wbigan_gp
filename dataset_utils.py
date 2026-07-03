@@ -120,16 +120,18 @@ val_transform = transforms.Compose([
 ])
 
 
-def get_dataloader(split: str, batch_size: int) -> DataLoader:
+def get_dataloader(dataset_dir: str, split: str, batch_size: int) -> DataLoader:
     """
     Returns a Dataloader for the split specified i.e. train or val.
 
+    :param dataset_dir: The location of the dataset on disk, which should be a directory
+        containing an images folder and a meta_data.csv file.
     :param split: The dataset split to construct a dataloader for i.e. train or val.
     :param batch_size: The number of images in each batch.
     :return: A dataloader for the given split specified in the input args.
     """
-    img_dir = os.path.join(CURRENT_DIR, "dataset", "processed", "images")
-    meta_path = os.path.join(CURRENT_DIR, "dataset", "processed", "meta_data.csv")
+    img_dir = os.path.join(dataset_dir, "images")
+    meta_path = os.path.join(dataset_dir, "meta_data.csv")
 
     device = get_device()  # Auto-detect what hardware is available
     if device == "cuda":  # Change kwargs depending on the device in use

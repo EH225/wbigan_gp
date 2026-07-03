@@ -10,7 +10,7 @@ sys.path.insert(0, PARENT_DIR)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.models.shared_components import SelfAttention
+from torch_models.shared_components import SelfAttention
 
 
 class ResDownBlock(nn.Module):

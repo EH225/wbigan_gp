@@ -10,7 +10,7 @@ sys.path.insert(0, PARENT_DIR)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.models.shared_components import SelfAttention
+from torch_models.shared_components import SelfAttention
 
 
 class ResUpBlock(nn.Module):
@@ -25,7 +25,7 @@ class ResUpBlock(nn.Module):
         :param in_channels: The number of channels of the tensor expected as input.
         :param out_channels: The number of channels to include in the output tensor.
         :param groups: The group size for group norm.
-        :param cond_dim: The size of the conditionl input vector i.e. z and the class_embed concatenated.
+        :param cond_dim: The size of the condition input vector i.e. z and the class_embed concatenated.
         """
         super().__init__()
         self.in_channels = in_channels
@@ -41,8 +41,8 @@ class ResUpBlock(nn.Module):
         self.norm1 = nn.GroupNorm(min(groups, in_channels), in_channels)
         self.norm2 = nn.GroupNorm(min(groups, out_channels), out_channels)
 
-        self.gamma1 = nn.Linear(cond_dim, out_channels)
-        self.beta1 = nn.Linear(cond_dim, out_channels)
+        self.gamma1 = nn.Linear(cond_dim, in_channels)
+        self.beta1 = nn.Linear(cond_dim, in_channels)
 
         self.gamma2 = nn.Linear(cond_dim, out_channels)
         self.beta2 = nn.Linear(cond_dim, out_channels)
@@ -56,7 +56,7 @@ class ResUpBlock(nn.Module):
         Forward pass through the up-sampling convolution residual block.
 
         :param x: An input tensor of size (B, in_channels, H, W).
-        :param cond_vec: A conditioning vector that is the concatentation of the latent z vector with
+        :param cond_vec: A conditioning vector that is the concatenation of the latent z vector with
             the class embedding. Injecting this conditional information into each residual blocks gives
             better steerability of the outputs.
         :returns: An output tensor of size (B, out_channels, 2*H, 2*W).

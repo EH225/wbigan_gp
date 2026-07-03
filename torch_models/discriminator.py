@@ -10,8 +10,8 @@ sys.path.insert(0, PARENT_DIR)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.models.encoder import ResDownBlock
-from torch.models.shared_components import SelfAttention
+from torch_models.encoder import ResDownBlock
+from torch_models.shared_components import SelfAttention
 
 
 class Discriminator(nn.Module):
@@ -73,7 +73,7 @@ class Discriminator(nn.Module):
 
         # Define the final MLP that will operate on the fusion of all 3 inputs (x, z, class_embed)
         self.mlp = nn.Sequential(
-            nn.Linear(512 + 2 * self.z_dim, 768),
+            nn.Linear(512 + 4 * self.z_dim, 768),
             nn.SiLU(),
             nn.Linear(768, 512),
             nn.SiLU(),
