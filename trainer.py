@@ -20,7 +20,7 @@ import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 from utils import get_device, get_amp_dtype, generate_loss_plots, save_images
 from torch_models.generator import Generator
-from torch_models.dncoder import Encoder
+from torch_models.encoder import Encoder
 from torch_models.discriminator import Discriminator
 from torch_models.shared_components import ClassEmbedding
 
