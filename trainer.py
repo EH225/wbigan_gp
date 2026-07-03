@@ -128,9 +128,9 @@ class Trainer:
         self.logger.propagate = False
 
         ### Configure the 3 models used in Bi-GAN training
-        self.generator = Generator(config.get("z_dim", 128))
-        self.encoder = Encoder(config.get("z_dim", 128))
-        self.discriminator = Discriminator(config.get("z_dim", 128))
+        self.generator = Generator(self.z_dim)
+        self.encoder = Encoder(self.z_dim)
+        self.discriminator = Discriminator(self.z_dim)
         self.class_embedding = ClassEmbedding(config["models"].get("num_classes", 37), self.z_dim)
         self.models = [self.generator, self.encoder, self.discriminator, self.class_embedding]
         for model in self.models:  # Report the number of trainable parameters in each model
