@@ -91,6 +91,7 @@ class Trainer:
                     ("eval_every", 10000), ("save_every", 5000)]
         for param_name, default_val in defaults:  # Extract from config dict if possible, otherwise use
             # the default value for each parameter defined immediately above
+            default_val = tuple(default_val) if param_name == "adam_betas" else default_val
             setattr(self, param_name, config["training"].get(param_name, default_val))
 
         setattr(self, "z_dim", config["models"].get("z_dim", 128))
