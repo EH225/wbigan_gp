@@ -375,7 +375,7 @@ class Trainer:
         # than penalizing gradients with respect to both the image and latent vector (z_interp)
         scores = self.discriminator(x_interp, z_interp, class_embed).sum()  # Compute critic scores (B, 1)
         # Compute the gradient out the critic scores wrt the input interpolated x_interp
-        grad, _ = torch.autograd.grad(outputs=scores, inputs=x_interp, create_graph=True)  # (B, 3, 128, 128)
+        grad, = torch.autograd.grad(outputs=scores, inputs=x_interp, create_graph=True)  # (B, 3, 128, 128)
         # Flatten (B, 3, 128, 128) -> (B, 3*128*128), partial derivatives wrt to each image as row vectors
         # then compute the Euclidean (L2) norm of each row ||grad_x D(x,z)||_2
         grad_norm = grad.reshape(batch_size, -1).norm(dim=1)  # (B, )
