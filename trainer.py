@@ -314,7 +314,7 @@ class Trainer:
         for model_name in ["encoder", "class_embedding"]:
             getattr(self, f"opt_{model_name}").zero_grad(set_to_none=True)
 
-        x_real = batch["real_img"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
+        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, )
         class_embed = self.class_embedding(class_id)  # (B, z_zim)
         z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
