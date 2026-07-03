@@ -519,7 +519,7 @@ class Trainer:
         ### 1). Generator Eval - Generate a few sample images for each class so that we can track the
         # progression of  the generator model over time. We expect to see image clarity gradually improve
         # and hope to avoid mode collapse
-        class_id = torch.tensor(list(range(self.class_embedding.num_classes)))  # (B=num_classes, )
+        class_id = torch.tensor(list(range(self.class_embedding.num_classes)), device=self.device)  # (B, )
         class_embed = self.class_embedding(class_id)  # (B, z_zim)
         z = torch.randn(len(class_id), self.z_dim, device=self.device)  # (B, z_dim)
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
