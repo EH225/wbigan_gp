@@ -198,7 +198,8 @@ class Trainer:
         for model in self.models:
             data[model.name] = getattr(self, model.name).state_dict()  # Model weights
             data[f"opt_{model.name}"] = getattr(self, f"opt_{model.name}").state_dict()  # Optimizer
-        data["scaler"] = self.scaler.state_dict()
+        if self.scaler is not None:
+            data["scaler"] = self.scaler.state_dict()
         torch.save(data, checkpoint_path)
         # Save down all the loss values produced by models training since the last caching
         cols = ["step", "generator_loss", "encoder_loss", "discriminator_loss"]
@@ -223,7 +224,8 @@ class Trainer:
         for model in self.models:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
             getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])  # Opt
-        self.scaler.load_state_dict(checkpoint_data["scaler"])
+        if self.scaler is not None and "scaler" in checkpoint_data:
+            self.scaler.load_state_dict(checkpoint_data["scaler"])
 
         # Losses are not loaded in, they are saved to disk periodically with the model weights and are not
         # needed to continue training. The losses obtained by training will be cached again at the next save
