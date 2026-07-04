@@ -537,7 +537,7 @@ class Trainer:
             z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
 
             z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
-            z_pred_all.append(z_pred.reshape(-1, 1))
+            z_pred_all.append(z_pred)
 
             x_fake = self.generator(z, class_embed)  # Generate fake images (B, 3, 128, 128)
             D_loss_real = self.discriminator(x_real, z_pred, class_embed).mean()
@@ -547,7 +547,7 @@ class Trainer:
         ### 2). Evaluation Eval - Estimate the performance of the encoder model by seeing how close the
         # y_pred outputs match the prior i.e. N(0, I). We expect to see the per dim mean approach 0 and
         # the per dim stddev converge to 1. We can compute NLL and a KL divergence as well.
-        z_pred = torch.concat(z_pred_all, dim=1)  # (N, z_dim) concatenate all the z_pred together
+        z_pred = torch.concat(z_pred_all, dim=0)  # (N, z_dim) concatenate all the z_pred together
         encoder_metrics = [
             z_pred.mean(dim=0).abs().mean(),  # Avg(|E(x)|) for each z-dim
             z_pred.std(dim=1).mean(),  # Avg(Stddev(x)) for each z-dim
