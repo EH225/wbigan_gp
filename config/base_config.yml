@@ -7,9 +7,9 @@ models: # Define model parameters
 
 training: # Specify parameters used for training
     batch_size: 256
-    critic_updates: 1 # The number of updates to the discriminator for every update to G and E
+    critic_updates: 3 # The number of updates to the discriminator for every update to G and E
     lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
-    lr: 5.0e-5
+    lr: 1.0e-4
     weight_decay: 0.0e-0
     train_num_steps: 300000
     adam_betas: [0.0, 0.9]
