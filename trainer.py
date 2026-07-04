@@ -524,7 +524,7 @@ class Trainer:
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
-        save_images(x_fake, titles, 5, os.path.join(self.samples_folder, f"sample-{self.step}.png"))
+        save_images(x_fake, titles, 8, os.path.join(self.samples_folder, f"sample-{self.step}.png"))
         self.generator.train()
 
         ### Encoder and Discriminator Eval
@@ -541,8 +541,8 @@ class Trainer:
             z_pred_all.append(z_pred)
 
             x_fake = self.generator(z, class_embed)  # Generate fake images (B, 3, 128, 128)
-            D_loss_real = self.discriminator(x_real, z_pred, class_embed).mean()
-            D_loss_fake = self.discriminator(x_fake, z, class_embed).mean()
+            D_loss_real = self.discriminator(x_real, z_pred, class_embed).mean().item()
+            D_loss_fake = self.discriminator(x_fake, z, class_embed).mean().item()
             D_loss_components.append((D_loss_real, D_loss_fake))
 
         ### 2). Evaluation Eval - Estimate the performance of the encoder model by seeing how close the
@@ -550,16 +550,16 @@ class Trainer:
         # the per dim stddev converge to 1. We can compute NLL and a KL divergence as well.
         z_pred = torch.concat(z_pred_all, dim=0)  # (N, z_dim) concatenate all the z_pred together
         encoder_metrics = [
-            z_pred.mean(dim=0).abs().mean(),  # Avg(|E(x)|) for each z-dim
-            z_pred.std(dim=0).mean(),  # Avg(Stddev(x)) for each z-dim
-            (-1) * (-0.5 * (z_pred.pow(2) + math.log(2 * math.pi)).sum(dim=0)).mean(),  # Avg(NLL)
+            z_pred.mean(dim=0).abs().mean().item(),  # Avg(|E(x)|) for each z-dim
+            z_pred.std(dim=0).mean().item(),  # Avg(Stddev(x)) for each z-dim
+            (-1) * (-0.5 * (z_pred.pow(2) + math.log(2 * math.pi)).sum(dim=0)).mean().item(),  # Avg(NLL)
         ]
 
         ### 3). Discriminator Eval - Track the performance of the model using the discriminator, track the
         # discriminator loss on the eval set and record the components for x_real, x_fake, and grad penalty
         discriminator_metrics = [
-            np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_real
-            np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_fake
+            np.array([x[0] for x in D_loss_components]).mean(),  # Mean D_loss_real
+            np.array([x[1] for x in D_loss_components]).mean(),  # Mean D_loss_fake
         ]
         self.val_losses.append([self.step] + encoder_metrics + discriminator_metrics)  # Record for caching
 
