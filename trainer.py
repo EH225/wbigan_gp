@@ -404,6 +404,22 @@ class Trainer:
         grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
+
+        print(
+            f"D_real={D_loss_real.item():.1f}",
+            f"D_fake={D_loss_fake.item():.1f}",
+        )
+
+        print(
+            f"|z|={z.norm(dim=1).mean():.2f}",
+            f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",
+        )
+
+        print(
+            f"GP={grad_penalty.item():.2f}",
+            f"grad_norm={grad_norm.mean().item():.2f}",
+        )
+
         return D_loss, D_loss_real, D_loss_fake, grad_penalty
 
     def compute_gradients(self, loss: torch.Tensor) -> None:
