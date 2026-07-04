@@ -39,7 +39,7 @@ def read_yaml(file_path: str) -> dict:
     :param file_path: A str denoting the location of a yaml file to read in.
     :return: A dictionary of data read in from the yaml file located at file_path.
     """
-    return yaml.load(open(file_path), Loader=yaml.FullLoader)
+    return yaml.safe_load(open(file_path))
 
 
 def get_device() -> str:
