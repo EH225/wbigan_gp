@@ -269,23 +269,23 @@ class Trainer:
         else:
             self.logger.info(f"RAM={cpu_ram_gb:.2f} GB")
 
-    def report_lr_opt_state(self) -> None:
-        """
-        Reports on the current optimizer learning rate and state via logging.
-        """
-        lr = self.opt.param_groups[0]['lr']
-        exp_avg_norm = torch.stack([
-            s['exp_avg'].norm() for s in self.opt.state.values() if 'exp_avg' in s
-        ]).mean().item()
-        exp_avg_sq_norm = torch.stack([
-            s['exp_avg_sq'].norm() for s in self.opt.state.values() if 'exp_avg_sq' in s
-        ]).mean().item()
+    # def report_lr_opt_state(self) -> None:
+    #     """
+    #     Reports on the current optimizer learning rate and state via logging.
+    #     """
+    #     lr = self.opt.param_groups[0]['lr']
+    #     exp_avg_norm = torch.stack([
+    #         s['exp_avg'].norm() for s in self.opt.state.values() if 'exp_avg' in s
+    #     ]).mean().item()
+    #     exp_avg_sq_norm = torch.stack([
+    #         s['exp_avg_sq'].norm() for s in self.opt.state.values() if 'exp_avg_sq' in s
+    #     ]).mean().item()
 
-        last_lr = self.scheduler.get_last_lr()[0]
-        self.logger.info(
-            f"step={self.step} | lr={lr:.2e} | scheduler_lr={last_lr:.2e} | "
-            f"exp_avg_norm={exp_avg_norm:.4f} | exp_avg_sq_norm={exp_avg_sq_norm:.4f}"
-        )
+    #     last_lr = self.scheduler.get_last_lr()[0]
+    #     self.logger.info(
+    #         f"step={self.step} | lr={lr:.2e} | scheduler_lr={last_lr:.2e} | "
+    #         f"exp_avg_norm={exp_avg_norm:.4f} | exp_avg_sq_norm={exp_avg_sq_norm:.4f}"
+    #     )
 
     @compute_with_amp
     def compute_G_loss(self, batch: Dict) -> torch.Tensor:
@@ -499,7 +499,7 @@ class Trainer:
                 self.step += 1
 
                 if self.step % 1000 == 0:
-                    self.report_lr_opt_state()  # Report info about the current learning rate and opt state
+                    # self.report_lr_opt_state()  # Report info about the current learning rate and opt state
                     self.report_memory_usage()  # Report info about the memory usage
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
