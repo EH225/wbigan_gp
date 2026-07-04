@@ -144,7 +144,7 @@ def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_pat
     axes = axes.reshape(-1)
 
     for ax, img, title in zip(axes, images, titles):
-        img = img.permute(1, 2, 0).cpu()  # (C, H, W) -> (H, W, C)
+        img = img.permute(1, 2, 0).float().cpu()  # (C, H, W) -> (H, W, C)
         img = ((img + 1) / 2).clamp(0, 1)  # Rescale from [-1, +1] back to [0, 1]
 
         ax.imshow(img)
