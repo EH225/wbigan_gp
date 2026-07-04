@@ -95,13 +95,8 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
 
     # 2). Convert from lists of dataframes into 1 consolidated dataframe, sort by train step
     train_loss = pd.concat(train_loss).sort_values("step")
-    val_loss = pd.concat(val_loss).sort_values("step")
-
     train_loss.index = train_loss.step
     train_loss.drop("step", inplace=True, axis=1)
-
-    val_loss.index = val_loss.step
-    val_loss.drop("step", inplace=True, axis=1)
 
     # 3). Generate and save a plot of the training loss
     fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(10, 3))
@@ -115,18 +110,23 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
     plt.tight_layout()
     fig.savefig(os.path.join(save_dir, "train_loss.png"))
 
-    # 4). Generate and save a plot of the training loss
-    fig, axes = plt.subplots(1, val_loss.shape[1], figsize=(15, 3))
+    if len(val_loss) > 0:
+        val_loss = pd.concat(val_loss).sort_values("step")
+        val_loss.index = val_loss.step
+        val_loss.drop("step", inplace=True, axis=1)
 
-    for i, col in enumerate(val_loss.columns):
-        ax = axes[i]
-        ax.plot(val_loss[col])
-        ax.set_title(f"val {col}")
-        ax.grid(color="lightgray")
+        # 4). Generate and save a plot of the validation loss
+        fig, axes = plt.subplots(1, val_loss.shape[1], figsize=(15, 3))
 
-    plt.tight_layout();
-    fig.savefig(os.path.join(save_dir, "val_loss.png"))
-    plt.close(fig)
+        for i, col in enumerate(val_loss.columns):
+            ax = axes[i]
+            ax.plot(val_loss[col])
+            ax.set_title(f"val {col}")
+            ax.grid(color="lightgray")
+
+        plt.tight_layout();
+        fig.savefig(os.path.join(save_dir, "val_loss.png"))
+        plt.close(fig)
 
 
 def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_path: str = None):

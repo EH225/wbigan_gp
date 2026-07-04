@@ -13,7 +13,7 @@ training: # Specify parameters used for training
     weight_decay: 0.0e-0
     train_num_steps: 30
     adam_betas: [0.0, 0.9]
-    grad_clip: null
+    grad_clip: 10.0
     use_amp: True
     use_latest_checkpoint: True
     eval_every: 10
