@@ -329,7 +329,7 @@ class Trainer:
         return E_loss
 
     @compute_with_amp
-    def compute_D_loss(self, batch: Dict, return_components: bool = False) -> torch.Tensor:
+    def compute_D_loss(self, batch: Dict) -> torch.Tensor:
         """
         Computes the discriminator loss (D_loss).
             1. Zeros the discriminator and class embedding optimizer gradients
@@ -337,8 +337,6 @@ class Trainer:
                 D(G(z), z, class_embed) - D(x_real, E(x_real), class_embed)
 
         :param batch: An input batch of data from the dataloader.
-        :param return_components: If true, the loss calc components are also returned i.e.
-            (D_loss_real, D_loss_fake, grad_penalty)
         :returns: D_loss, the discriminator loss averaged over the batch.
         """
         for model_name in ["discriminator", "class_embedding"]:
@@ -391,7 +389,7 @@ class Trainer:
         grad_penalty = self.lambda_val * ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += grad_penalty
 
-        return D_loss if return_components is False else (D_loss, (D_loss_real, D_loss_fake, grad_penalty))
+        return D_loss
 
     def compute_gradients(self, loss: torch.Tensor) -> None:
         """
@@ -535,9 +533,16 @@ class Trainer:
             x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
             class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
             class_embed = self.class_embedding(class_id)  # (B, z_zim)
+            batch_size = len(x_real)  # Will be <= self.batch_size
+            z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
+
             z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
             z_pred_all.append(z_pred.reshape(-1, 1))
-            D_loss_components.append(self.compute_D_loss(batch, True))
+
+            x_fake = self.generator(z, class_embed)  # Generate fake images (B, 3, 128, 128)
+            D_loss_real = self.discriminator(x_real, z_pred, class_embed).mean()
+            D_loss_fake = self.discriminator(x_fake, z, class_embed).mean()
+            D_loss_components.append((D_loss_real, D_loss_fake))
 
         ### 2). Evaluation Eval - Estimate the performance of the encoder model by seeing how close the
         # y_pred outputs match the prior i.e. N(0, I). We expect to see the per dim mean approach 0 and
@@ -552,10 +557,8 @@ class Trainer:
         ### 3). Discriminator Eval - Track the performance of the model using the discriminator, track the
         # discriminator loss on the eval set and record the components for x_real, x_fake, and grad penalty
         discriminator_metrics = [
-            np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss value
-            np.array([x[1][0].item() for x in D_loss_components]).mean(),  # Mean D_loss_real
-            np.array([x[1][1].item() for x in D_loss_components]).mean(),  # Mean D_loss_fake
-            np.array([x[1][2].item() for x in D_loss_components]).mean(),  # Mean grad_penalty
+            np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_real
+            np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_fake
         ]
         self.val_losses.append(encoder_metrics + discriminator_metrics)  # Record for caching
 

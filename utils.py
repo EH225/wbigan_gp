@@ -140,7 +140,7 @@ def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_pat
     """
     nrow, r = divmod(len(images), ncol)
     nrow += (r > 0) * 1
-    fig, axes = plt.subplots(nrow, ncol, figsize=(9, 3))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(15, nrow * 5))
     axes = axes.reshape(-1)
 
     for ax, img, title in zip(axes, images, titles):
