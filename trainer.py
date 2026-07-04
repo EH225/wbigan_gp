@@ -381,14 +381,19 @@ class Trainer:
         z_interp = alpha * z + (1 - alpha) * z_pred  # (B, z_dim)
 
         x_interp.requires_grad_(True)  # x_fake and x_real don't have gradients, turn them on for this calc
-        # Here we will penalize gradients only with respect to the image, which is simpler and more common
-        # than penalizing gradients with respect to both the image and latent vector (z_interp)
-        scores = self.discriminator(x_interp, z_interp, class_embed).sum()  # Compute critic scores (B, 1)
-        # Compute the gradient out the critic scores wrt the input interpolated x_interp
-        grad, = torch.autograd.grad(outputs=scores, inputs=x_interp, create_graph=True)  # (B, 3, 128, 128)
+        z_interp.requires_grad_(True)  # z_pred and z don't have gradients, turn them on for this calc
+        # Here we will penalize gradients both with respect to the interpolated image and z-vector, to enforce
+        # the condition on the joint feature space which is required in the bi-GAN setting
+        scores = self.discriminator(x_interp, z_interp, class_embed).squeeze()  # Compute critic scores (B, )
+        # Compute the gradient of the critic scores wrt the input interpolated x_interp
+        # (B, 3, 128, 128), (B, z_dim)
+        grad_x, grad_z = torch.autograd.grad(outputs=scores, inputs=[x_interp, z_interp],
+                                             grad_outputs=torch.ones_like(scores), create_graph=True)
         # Flatten (B, 3, 128, 128) -> (B, 3*128*128), partial derivatives wrt to each image as row vectors
         # then compute the Euclidean (L2) norm of each row ||grad_x D(x,z)||_2
-        grad_norm = grad.reshape(batch_size, -1).norm(dim=1)  # (B, )
+        grad_x = grad_x.reshape(batch_size, -1)  # (B, 3, 128, 128) -> (B, 49152)
+        grad = torch.cat([grad_x, grad_z], dim=1)  # (B, 49152 + z_dim)
+        grad_norm = grad.norm(2, dim=1)  # (B, )
         # Penalize deviations from 1, as shown in the WGAN-GP paper i.e. a 1-Lipschitz function satisfies
         # ||grad_x D(x,z)||_2 == 1 along the sampled interpolated points between the 2 distributions,
         # real and fake. Compute the MSE of the grad_norm vs 1.0 everywhere
@@ -396,8 +401,8 @@ class Trainer:
         # If it's too flat, the gradient norm is less than 1, so the penalty encourages steeper slopes
         # During training, this nudges the critic toward having a gradient magnitude close to 1 on the
         # interpolated points, which is the smoothness condition WGAN-GP is enforcing
-        grad_penalty = self.lambda_val * ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
-        D_loss += grad_penalty
+        grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
+        D_loss += self.lambda_val * grad_penalty
 
         return D_loss, D_loss_real, D_loss_fake, grad_penalty
 
