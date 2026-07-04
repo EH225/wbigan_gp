@@ -97,7 +97,7 @@ class Trainer:
         setattr(self, "z_dim", config["models"].get("z_dim", 128))
 
         ### Set up folders for the output (samples images), losses, and model checkpoints
-        results_folder = os.path.join(CURRENT_DIR, str(config["name"]))  # Construct from config name
+        results_folder = os.path.join(CURRENT_DIR, "results", str(config["name"]))
         self.results_folder = results_folder  # A directory where the checkpoints will be saved
         self.checkpoints_folder = os.path.join(self.results_folder, "checkpoints")
         self.losses_folder = os.path.join(self.results_folder, "losses")
@@ -207,6 +207,7 @@ class Trainer:
         df = pd.DataFrame(self.train_losses, columns=cols)
         df.to_csv(os.path.join(self.losses_folder, f"train-losses-{milestone}.csv"))
         # Convert the validation losses to a pd.DataFrame and save down the results
+        cols = ["step", "E_avg", "E_std", "D_real", "D_fake"]
         df = pd.DataFrame(self.val_losses, columns=cols)
         df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
 
@@ -523,7 +524,7 @@ class Trainer:
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
-        save_images(x_fake, titles, 4, os.path.join(self.samples_folder, f"sample-{self.step}.png"))
+        save_images(x_fake, titles, 5, os.path.join(self.samples_folder, f"sample-{self.step}.png"))
         self.generator.train()
 
         ### Encoder and Discriminator Eval
@@ -550,7 +551,7 @@ class Trainer:
         z_pred = torch.concat(z_pred_all, dim=0)  # (N, z_dim) concatenate all the z_pred together
         encoder_metrics = [
             z_pred.mean(dim=0).abs().mean(),  # Avg(|E(x)|) for each z-dim
-            z_pred.std(dim=1).mean(),  # Avg(Stddev(x)) for each z-dim
+            z_pred.std(dim=0).mean(),  # Avg(Stddev(x)) for each z-dim
             (-1) * (-0.5 * (z_pred.pow(2) + math.log(2 * math.pi)).sum(dim=0)).mean(),  # Avg(NLL)
         ]
 
@@ -560,7 +561,7 @@ class Trainer:
             np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_real
             np.array([x[0].item() for x in D_loss_components]).mean(),  # Mean D_loss_fake
         ]
-        self.val_losses.append(encoder_metrics + discriminator_metrics)  # Record for caching
+        self.val_losses.append([self.step] + encoder_metrics + discriminator_metrics)  # Record for caching
 
         for model in self.models:  # Switch all models back to train mode
             model.train()
