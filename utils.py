@@ -141,11 +141,17 @@ def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_pat
     nrow, r = divmod(len(images), ncol)
     nrow += (r > 0) * 1
     fig, axes = plt.subplots(nrow, ncol, figsize=(9, 3))
+    axes = axes.reshape(-1)
 
     for ax, img, title in zip(axes, images, titles):
         img = img.permute(1, 2, 0).cpu()  # (C, H, W) -> (H, W, C)
+        img = ((img + 1) / 2).clamp(0, 1)  # Rescale from [-1, +1] back to [0, 1]
+
         ax.imshow(img)
         ax.set_title(title)
+        ax.axis("off")
+
+    for ax in axes[len(images):]:  # Hide axes that do not have images displayed
         ax.axis("off")
 
     plt.tight_layout()
