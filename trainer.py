@@ -458,8 +458,7 @@ class Trainer:
                 ### Perform K updates to the critic model first
                 for _ in range(self.critic_updates):
                     batch = next(inf_dataloader)
-                    D_loss, r = self.compute_D_loss(batch)  # Compute the D loss over this batch with grads
-                    D_loss_real, D_loss_fake, grad_penalty = r # Unpack the other D results as well
+                    D_loss, D_loss_real, D_loss_fake, grad_penalty = self.compute_D_loss(batch)
                     self.compute_gradients(D_loss)  # Call backwards() on the loss to compute gradients
                     D_grad = self.optimizer_step(self.discriminator)  # Update model params of D
                     self.optimizer_step(self.class_embedding)  # Update the class embedding model params
