@@ -104,7 +104,7 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
     val_loss.drop("step", inplace=True, axis=1)
 
     # 3). Generate and save a plot of the training loss
-    fig, axes = plt.subplots(1, 3, figsize=(10, 3))
+    fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(10, 3))
 
     for i, col in enumerate(train_loss.columns):
         ax = axes[i]
@@ -116,7 +116,7 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
     fig.savefig(os.path.join(save_dir, "train_loss.png"))
 
     # 4). Generate and save a plot of the training loss
-    fig, axes = plt.subplots(1, 3, figsize=(10, 3))
+    fig, axes = plt.subplots(1, val_loss.shape[1], figsize=(15, 3))
 
     for i, col in enumerate(val_loss.columns):
         ax = axes[i]
