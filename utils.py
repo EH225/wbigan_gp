@@ -94,21 +94,23 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
                 val_loss.append(df)
 
     # 2). Convert from lists of dataframes into 1 consolidated dataframe, sort by train step
-    train_loss = pd.concat(train_loss).sort_values("step")
-    train_loss.index = train_loss.step
-    train_loss.drop("step", inplace=True, axis=1)
+    if len(train_loss) > 0:
+        train_loss = pd.concat(train_loss).sort_values("step")
+        train_loss.index = train_loss.step
+        train_loss.drop("step", inplace=True, axis=1)
 
-    # 3). Generate and save a plot of the training loss
-    fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(10, 3))
+        # 3). Generate and save a plot of the training loss
+        fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(10, 3))
 
-    for i, col in enumerate(train_loss.columns):
-        ax = axes[i]
-        ax.plot(train_loss[col].rolling(50, min_periods=1).mean())
-        ax.set_title(f"train {col}")
-        ax.grid(color="lightgray")
+        for i, col in enumerate(train_loss.columns):
+            ax = axes[i]
+            ax.plot(train_loss[col].rolling(50, min_periods=1).mean()) # Apply smoothing
+            ax.set_title(f"train {col}")
+            ax.grid(color="lightgray")
 
-    plt.tight_layout()
-    fig.savefig(os.path.join(save_dir, "train_loss.png"))
+        plt.tight_layout()
+        fig.savefig(os.path.join(save_dir, "train_loss.png"))
+        plt.close(fig)
 
     if len(val_loss) > 0:
         val_loss = pd.concat(val_loss).sort_values("step")

@@ -210,7 +210,7 @@ class Trainer:
             data["scaler"] = self.scaler.state_dict()
         torch.save(data, checkpoint_path)
         # Save down all the loss values produced by models training since the last caching
-        cols = ["step", "generator_loss", "encoder_loss", "discriminator_loss"]
+        cols = ["step", "G_loss", "E_loss", "D_loss", "D_loss_real", "D_loss_fake", "grad_penalty"]
         # Convert the train losses to a pd.DataFrame and save down the results
         df = pd.DataFrame(self.train_losses, columns=cols)
         df.to_csv(os.path.join(self.losses_folder, f"train-losses-{milestone}.csv"))
@@ -399,7 +399,7 @@ class Trainer:
         grad_penalty = self.lambda_val * ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += grad_penalty
 
-        return D_loss
+        return D_loss, D_loss_real, D_loss_fake, grad_penalty
 
     def compute_gradients(self, loss: torch.Tensor) -> None:
         """
@@ -458,7 +458,8 @@ class Trainer:
                 ### Perform K updates to the critic model first
                 for _ in range(self.critic_updates):
                     batch = next(inf_dataloader)
-                    D_loss = self.compute_D_loss(batch)  # Compute the D loss over this batch with grads
+                    D_loss, r = self.compute_D_loss(batch)  # Compute the D loss over this batch with grads
+                    D_loss_real, D_loss_fake, grad_penalty = r # Unpack the other D results as well
                     self.compute_gradients(D_loss)  # Call backwards() on the loss to compute gradients
                     D_grad = self.optimizer_step(self.discriminator)  # Update model params of D
                     self.optimizer_step(self.class_embedding)  # Update the class embedding model params
@@ -489,7 +490,8 @@ class Trainer:
                     D_loss=f"{D_loss.item():.4f}", D_grad=f"{D_grad:.3f}", )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
-                self.train_losses.append((self.step, G_loss.item(), E_loss.item(), D_loss.item()))
+                self.train_losses.append((self.step, G_loss.item(), E_loss.item(), D_loss.item(),
+                                          D_loss_real.item(), D_loss_fake.item(), grad_penalty.item()))
                 self.step += 1
 
                 if self.step % 1000 == 0:
