@@ -100,11 +100,11 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
         train_loss.drop("step", inplace=True, axis=1)
 
         # 3). Generate and save a plot of the training loss
-        fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(10, 3))
+        fig, axes = plt.subplots(1, train_loss.shape[1], figsize=(18, 3))
 
         for i, col in enumerate(train_loss.columns):
             ax = axes[i]
-            ax.plot(train_loss[col].rolling(50, min_periods=1).mean()) # Apply smoothing
+            ax.plot(train_loss[col].rolling(50, min_periods=1).mean())  # Apply smoothing
             ax.set_title(f"train {col}")
             ax.grid(color="lightgray")
 
