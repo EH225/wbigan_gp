@@ -107,25 +107,33 @@ class Trainer:
             os.makedirs(directory, exist_ok=True)  # Create the directory if not already there
 
         #### Set up logging during training
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger(f"{self.__class__.__name__}_{id(self)}")
         self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False
 
-        if not self.logger.handlers:  # Prevent duplicate handlers
-            file_handler = logging.FileHandler(os.path.join(self.results_folder, "train.log"),
-                                               encoding="utf-8")
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+        # Remove any existing handlers so re-running a notebook cell doesn't duplicate logs
+        for handler in self.logger.handlers[:]:
+            handler.close()
+            self.logger.removeHandler(handler)
+
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s"
         )
-        # file_handler.stream = sys.stdout  # Ensure UTF-8 capable stream
+
+        # Log to file
+        file_handler = logging.FileHandler(
+            os.path.join(self.results_folder, "train.log"),
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
 
+        # Log through tqdm
         tqdm_handler = TqdmLoggingHandler()
-        tqdm_handler.setFormatter(
-            logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-        )
-        # tqdm_handler.stream = sys.stdout  # Ensure UTF-8 capable stream
+        tqdm_handler.setFormatter(formatter)
         self.logger.addHandler(tqdm_handler)
-        self.logger.propagate = False
+
+        self.logger.setLevel(logging.INFO)
 
         ### Configure the 3 models used in Bi-GAN training
         self.generator = Generator(self.z_dim)

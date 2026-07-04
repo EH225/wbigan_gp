@@ -126,6 +126,7 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
 
     plt.tight_layout();
     fig.savefig(os.path.join(save_dir, "val_loss.png"))
+    plt.close(fig)
 
 
 def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_path: str = None):
@@ -157,3 +158,4 @@ def save_images(images: torch.Tensor, titles: List[str], ncol: int = 4, save_pat
     plt.tight_layout()
     save_path = "samples.png" if save_path is None else save_path
     plt.savefig(save_path)
+    plt.close(fig)
