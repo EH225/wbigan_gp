@@ -216,8 +216,9 @@ class Trainer:
         df.to_csv(os.path.join(self.losses_folder, f"train-losses-{milestone}.csv"))
         # Convert the validation losses to a pd.DataFrame and save down the results
         cols = ["step", "E_avg", "E_std", "E_NLL", "D_real", "D_fake"]
-        df = pd.DataFrame(self.val_losses, columns=cols)
-        df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
+        if len(self.val_losses) > 0:
+            df = pd.DataFrame(self.val_losses, columns=cols)
+            df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
 
     def load(self, milestone: int) -> None:
         """

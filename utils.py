@@ -108,11 +108,11 @@ def generate_loss_plots(loss_dir: str, save_dir: str) -> None:
 
     for i, col in enumerate(train_loss.columns):
         ax = axes[i]
-        ax.plot(train_loss[col].rolling(50).mean())
+        ax.plot(train_loss[col].rolling(50, min_periods=1).mean())
         ax.set_title(f"train {col}")
         ax.grid(color="lightgray")
 
-    plt.tight_layout();
+    plt.tight_layout()
     fig.savefig(os.path.join(save_dir, "train_loss.png"))
 
     # 4). Generate and save a plot of the training loss
