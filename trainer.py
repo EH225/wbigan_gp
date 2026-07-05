@@ -565,7 +565,7 @@ class Trainer:
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
                 if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
-                        self.generate_samples(self.pretrain_samples_folder)
+                        self.generate_samples(pretrain=True)
 
                 ### Periodically save the model weights to disk, always on the last iter too
                 if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.pretrain_num_steps:
@@ -663,7 +663,7 @@ class Trainer:
                 pbar.update(1)
 
     @compute_with_amp
-    def generate_samples(self, samples_folder: str):
+    def generate_samples(self, pretrain: bool = False):
         """
         Runs G(z) to create a grid of images, 1 for each class. Results are saved to disk.
         """
@@ -676,7 +676,9 @@ class Trainer:
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
-        save_images(x_fake, titles, 8, os.path.join(samples_folder, f"sample-{self.step}.png"))
+        samples_folder = self.pretrain_samples_folder if pretrain else self.samples_folder
+        file_name = f"sample-{self.pretrain_step}.png" if pretrain else f"sample-{self.step}.png"
+        save_images(x_fake, titles, 8, os.path.join(samples_folder, file_name))
 
         for model in [self.generator, self.class_embedding]:
             model.train()
@@ -693,7 +695,7 @@ class Trainer:
         ### 1). Generator Eval - Generate a few sample images for each class so that we can track the
         # progression of  the generator model over time. We expect to see image clarity gradually improve
         # and hope to avoid mode collapse
-        self.generate_samples(self.samples_folder)
+        self.generate_samples(pretrain=False)
 
         ### Encoder and Discriminator Eval
         z_pred_all = []
