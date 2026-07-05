@@ -410,17 +410,18 @@ class Trainer:
         D_loss += self.lambda_val * grad_penalty
 
         if self.step % 100 == 0:
-            print(
+            print(f"Step: {self.step}")
+            print("   ",
                 f"D_real={D_loss_real.item():.1f}",
                 f"D_fake={D_loss_fake.item():.1f}",
             )
 
-            print(
+            print("   ",
                 f"|z|={z.norm(dim=1).mean():.2f}",
                 f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",
             )
 
-            print(
+            print("   ",
                 f"GP={grad_penalty.item():.2f}",
                 f"grad_norm={grad_norm.mean().item():.2f}",
             )
