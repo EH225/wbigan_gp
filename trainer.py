@@ -539,7 +539,7 @@ class Trainer:
                 ### Compute x_hat = G(E(x_real) + noise) with an L1 loss vs the original real images
                 # Add a little noise to the encoder outputs so that the generator learns to handle the region
                 # around E(x_real) and not just the exact outputs directly, this is a regularizer effect
-                z_noisy = z_pred + 0.05 * torch.randn_like(z)
+                z_noisy = z_pred + 0.05 * torch.randn_like(z_pred)
                 x_hat = self.generator(z_noisy, class_embed)  # Generate reconstructions (B, 3, 128, 128)
                 recon_loss = F.l1_loss(x_hat, x_real)
 
