@@ -540,11 +540,11 @@ class Trainer:
                 x_hat = self.generator(z_pred, class_embed)  # Generate reconstructions (B, 3, 128, 128)
                 recon_loss = F.l1_loss(x_hat, x_real)
 
-                # Compute z_pred = E(G(z)) with an L2 loss vs the original z vector
+                # Compute z_cycle = E(G(z)) with an L2 loss vs the original z vector
                 batch_size = len(x_real)  # Will be <= self.batch_size
                 z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
-                z_pred = self.encoder(self.generator(z, class_embed), class_embed)  # (B, z_dim)
-                latent_cycle_loss = F.smooth_l1_loss(z_pred, z)  # MSE loss wrt the latent vector
+                z_cycle = self.encoder(self.generator(z, class_embed), class_embed)  # (B, z_dim)
+                latent_cycle_loss = F.smooth_l1_loss(z_cycle, z)  # MSE loss wrt the latent vector
 
                 ### Compute a gradient update now that the loss has been computed
                 loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss
@@ -574,6 +574,11 @@ class Trainer:
                         file_name = f"reconstructions-{self.pretrain_step}.png"
                         save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
+                        # Print some diagnostic stats on how the encoder outputs look
+                        print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean()}")
+                        print(f"mean_loss: {mean_loss:.3f}, std_loss: {std_loss:.3f}")
+                        print(f"Avg |E(x)|, {z_pred.mean(dim=1).abs().mean(dim=0):.2f}",
+                              f"Avg std(x), {z_pred.std(dim=1).mean(dim=0):.2f}")
 
                 ### Periodically save the model weights to disk, always on the last iter too
                 if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.pretrain_num_steps:
