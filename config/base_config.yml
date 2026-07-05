@@ -16,5 +16,5 @@ training: # Specify parameters used for training
   grad_clip: 1.0
   use_amp: False
   use_latest_checkpoint: True
-  eval_every: 250
-  save_every: 500
+  eval_every: 2500
+  save_every: 10000
