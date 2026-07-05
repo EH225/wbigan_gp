@@ -103,6 +103,9 @@ class Discriminator(nn.Module):
 
         # 2). Apply an MLP processing step to the input z-vector
         z = self.mlp_z(z)
+        # Normalize the latent representation before passing it into the discriminator so that it does not
+        # simply learn that large magnitude z vectors from the encoder indicate real images
+        z = F.layer_norm(z, z.shape[-1:])
 
         # 3). Apply an MLP processing step to the input class embedding
         class_embed = self.mlp_c(class_embed)
