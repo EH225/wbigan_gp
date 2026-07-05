@@ -14,7 +14,7 @@ training: # Specify parameters used for training
   pretrain_num_steps: 200000
   train_num_steps: 300000
   adam_betas: [0.9, 0.999]
-  grad_clip: 3.0
+  grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 1000
