@@ -536,8 +536,11 @@ class Trainer:
                 prior_loss = mean_loss + std_loss
                 # prior_loss = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)
 
-                ### Compute x_hat = G(E(x_real)) with an L1 loss vs the original real images
-                x_hat = self.generator(z_pred, class_embed)  # Generate reconstructions (B, 3, 128, 128)
+                ### Compute x_hat = G(E(x_real) + noise) with an L1 loss vs the original real images
+                # Add a little noise to the encoder outputs so that the generator learns to handle the region
+                # around E(x_real) and not just the exact outputs directly
+                z_noisy = z + 0.05 * torch.randn_like(z)
+                x_hat = self.generator(z_noisy, class_embed)  # Generate reconstructions (B, 3, 128, 128)
                 recon_loss = F.l1_loss(x_hat, x_real)
 
                 # Compute z_cycle = E(G(z)) with an L2 loss vs the original z vector
@@ -575,7 +578,7 @@ class Trainer:
                         save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
-                        print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean()}")
+                        print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean()}:.2f")
                         print(f"mean_loss: {mean_loss:.3f}, std_loss: {std_loss:.3f}")
                         print(f"Avg |E(x)|, {z_pred.mean(dim=1).abs().mean(dim=0):.2f}",
                               f"Avg std(x), {z_pred.std(dim=1).mean(dim=0):.2f}")
