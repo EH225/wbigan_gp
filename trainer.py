@@ -527,7 +527,7 @@ class Trainer:
                 ### Compute z_pred = E(x_real) with regularization towards the N(0, I) prior
                 z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
                 # Add the regularization penalty to encourage N(0, 1) behavior
-                mean_loss = z_pred.mean(dim=0).pow(2).mean()  # Encourage each dim to be mean zero
+                mean_loss = z_pred.mean(dim=0).pow(2).mean()  # Encourage each dim of z_pred to be mean zero
                 std_loss = (z_pred.std(dim=0) - 1).pow(2).mean()  # and stddev 1
                 prior_loss = mean_loss + std_loss
                 # prior_loss = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)
@@ -565,7 +565,11 @@ class Trainer:
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
                 if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
-                        self.generate_samples(pretrain=True)
+                        self.generate_samples(pretrain=True)  # Generate some samples using random z-values
+                        # Also save samples of reconstructed images i.e. G(E(x_real))
+                        file_name = f"reconstructions-{self.pretrain_step}.png"
+                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu(), ncol=8,
+                                    os.path.join(self.pretrain_samples_folder, file_name))
 
                 ### Periodically save the model weights to disk, always on the last iter too
                 if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.pretrain_num_steps:
