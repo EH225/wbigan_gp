@@ -2,19 +2,19 @@
 name: wbigan
 
 models: # Define model parameters
-    z_dim: 128 # Latent vector dimension
-    num_classes: 37 # The number of conditional class IDs
+  z_dim: 128 # Latent vector dimension
+  num_classes: 37 # The number of conditional class IDs
 
 training: # Specify parameters used for training
-    batch_size: 256
-    critic_updates: 1 # The number of updates to the discriminator for every update to G and E
-    lambda_val: 30.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
-    lr: 5.5e-5 # 1.0e-4
-    weight_decay: 0.0e-0
-    train_num_steps: 300000
-    adam_betas: [0.0, 0.9]
-    grad_clip: 10.0
-    use_amp: False
-    use_latest_checkpoint: True
-    eval_every: 250
-    save_every: 500
+  batch_size: 256
+  critic_updates: 1 # The number of updates to the discriminator for every update to G and E
+  lambda_val: 20.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
+  lr: 5.5e-5 # 1.0e-4
+  weight_decay: 0.0e-0
+  train_num_steps: 300000
+  adam_betas: [ 0.0, 0.9 ]
+  grad_clip: 1.0
+  use_amp: False
+  use_latest_checkpoint: True
+  eval_every: 250
+  save_every: 500
