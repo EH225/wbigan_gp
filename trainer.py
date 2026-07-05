@@ -528,9 +528,6 @@ class Trainer:
                 class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
                 class_embed = self.class_embedding(class_id)  # (B, z_zim)
 
-                print("x_real.shape", x_real.shape)
-                print("class_id.shape", class_id.shape)
-
                 ### Compute z_pred = E(x_real) with regularization towards the N(0, I) prior
                 z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
                 # Add the regularization penalty to encourage N(0, 1) behavior
@@ -568,8 +565,6 @@ class Trainer:
                 self.train_losses.append((self.pretrain_step, prior_loss.item(), recon_loss.item(),
                                           latent_cycle_loss.item()))
                 self.pretrain_step += 1
-
-                print("x_hat.shape", x_hat.shape)
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
                 if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
