@@ -255,7 +255,10 @@ class Trainer:
         checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
         self.logger.info(f"Loading model from {checkpoint_path}.")
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
-        self.step = checkpoint_data["step"]
+        if pretrain:
+            self.step = checkpoint_data["step"]
+        else:
+            self.pretrain_step = checkpoint_data["step"]
         for model in self.models:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
             getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])  # Opt
