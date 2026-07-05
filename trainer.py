@@ -568,7 +568,7 @@ class Trainer:
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
                         file_name = f"reconstructions-{self.pretrain_step}.png"
-                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu(), ncol=8,
+                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
 
                 ### Periodically save the model weights to disk, always on the last iter too
