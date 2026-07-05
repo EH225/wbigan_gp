@@ -251,7 +251,8 @@ class Trainer:
         :param milestone: An integer denoting the training timestep at which the model weights were saved.
         :returns: None. Weights are loaded into the model.
         """
-        checkpoint_path = os.path.join(self.checkpoints_folder, f"model-{milestone}.pt")
+        file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
+        checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
         self.logger.info(f"Loading model from {checkpoint_path}.")
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
         self.step = checkpoint_data["step"]
