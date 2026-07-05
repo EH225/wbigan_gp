@@ -566,13 +566,15 @@ class Trainer:
                                           latent_cycle_loss.item()))
                 self.pretrain_step += 1
 
+                print("x_hat.shape", x_hat.shape)
+
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
                 if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
                         file_name = f"reconstructions-{self.pretrain_step}.png"
-                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu(), 8,
+                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
 
                 ### Periodically save the model weights to disk, always on the last iter too

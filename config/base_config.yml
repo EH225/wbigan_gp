@@ -18,4 +18,4 @@ training: # Specify parameters used for training
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 1000
-  save_every: 10000
+  save_every: 1000
