@@ -6,7 +6,7 @@ models: # Define model parameters
   num_classes: 37 # The number of conditional class IDs
 
 training: # Specify parameters used for training
-  batch_size: 128
+  batch_size: 64
   critic_updates: 1 # The number of updates to the discriminator for every update to G and E
   lambda_val: 20.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
   lr: 1.0e-4  # 5.5e-5
