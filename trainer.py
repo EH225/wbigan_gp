@@ -11,6 +11,7 @@ import argparse
 import psutil
 import math
 import torch.nn as nn
+import torch.nn.functional as F
 from functools import wraps
 from tqdm.auto import tqdm
 from typing import Tuple, Callable, Dict, List
@@ -86,9 +87,9 @@ class Trainer:
 
         ### Extract training parameters from the config dict
         defaults = [("batch_size", 256), ("critic_updates", 5), ("lambda_val", 10.0), ("lr", 1.0e-4),
-                    ("weight_decay", 0.0e-0), ("train_num_steps", 400000), ("adam_betas", (0.0, 0.9)),
-                    ("grad_clip", 5.0), ("use_amp", True), ("use_latest_checkpoint", True),
-                    ("eval_every", 10000), ("save_every", 5000)]
+                    ("weight_decay", 0.0e-0), ("pretrain_num_steps", 100000), ("train_num_steps", 400000),
+                    ("adam_betas", (0.0, 0.9)), ("grad_clip", 5.0), ("use_amp", True),
+                    ("use_latest_checkpoint", True), ("eval_every", 10000), ("save_every", 5000)]
         for param_name, default_val in defaults:  # Extract from config dict if possible, otherwise use
             # the default value for each parameter defined immediately above
             default_val = tuple(default_val) if param_name == "adam_betas" else default_val
@@ -101,9 +102,11 @@ class Trainer:
         self.results_folder = results_folder  # A directory where the checkpoints will be saved
         self.checkpoints_folder = os.path.join(self.results_folder, "checkpoints")
         self.losses_folder = os.path.join(self.results_folder, "losses")
+        self.pretrain_losses_folder = os.path.join(self.results_folder, "pretrain_losses")
+        self.pretrain_samples_folder = os.path.join(self.results_folder, "pretrain_samples")
         self.samples_folder = os.path.join(self.results_folder, "samples")
-        for directory in [self.results_folder, self.checkpoints_folder,
-                          self.losses_folder, self.samples_folder]:
+        for directory in [self.results_folder, self.checkpoints_folder, self.losses_folder,
+                          self.pretrain_losses_folder, self.pretrain_samples_folder, self.samples_folder]:
             os.makedirs(directory, exist_ok=True)  # Create the directory if not already there
 
         #### Set up logging during training
@@ -150,6 +153,7 @@ class Trainer:
         # Save a pointers to the train and validation dataloaders
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
+        self.pretrain_step = 0  # Training step counter for pre-training
         self.step = 0  # Training step counter, will train until this reaches train_num_steps
         self.train_losses, self.val_losses = [], []  # Aggregate loss values during training
 
@@ -185,42 +189,62 @@ class Trainer:
         # Create 1 grad scaler for all models to use
         self.scaler = torch.amp.GradScaler("cuda") if self.amp_dtype == torch.float16 else None
 
-        ### Load in weights from disk if resuming training from a prior checkpoint
+        ### Load in weights from disk if resuming training from a prior checkpoint. We always load in the
+        # non-pretraining model checkpoint if one is available
         if self.use_latest_checkpoint:
-            checkpoints = os.listdir(self.checkpoints_folder)
-            if len(checkpoints) > 0:
-                last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
-                                       for x in checkpoints if x.endswith(".pt")])
-                self.load(last_checkpoint)  # Load in the most recent milestone to continue training
+            checkpoints = os.listdir(self.checkpoints_folder)  # Get all files listed in the directory
+            if len(checkpoints) > 0:  # If there are any, we can load the latest one
+                pretrain_checkpoints = [x for x in checkpoints if x.startswith("pretrain-model")
+                                        and x.endswith(".pt")]
+                model_checkpoints = [x for x in checkpoints if x.startswith("model") and x.endswith(".pt")]
+                if len(model_checkpoints) > 0:
+                    last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
+                                           for x in model_checkpoints if x.endswith(".pt")])
+                    self.load(last_checkpoint, False)  # Load in the most recent milestone to continue
+                elif len(pretrain_checkpoints) > 0:
+                    last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
+                                           for x in pretrain_checkpoints if x.endswith(".pt")])
+                    self.load(last_checkpoint, True)
 
-    def save(self, milestone: int) -> None:
+    def save(self, milestone: int, pretrain: bool = False) -> None:
         """
         Saves the weights and training state of the models for the current milestone.
 
         :param milestone: An integer denoting the training timestep at which the model weights were saved.
+        :param pretrain: A bool flag indicating if this milestone is a pretraining milestone.
         :returns: None. Writes the weights and losses to disk.
         """
-        checkpoint_path = os.path.join(self.checkpoints_folder, f"model-{milestone}.pt")
+        file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
+        checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
         self.logger.info(f"Saving model to {checkpoint_path}.")
-        data = {"step": self.step}
+        data = {"step": self.pretrain_step} if pretrain else {"step": self.step}
         for model in self.models:
             data[model.name] = getattr(self, model.name).state_dict()  # Model weights
             data[f"opt_{model.name}"] = getattr(self, f"opt_{model.name}").state_dict()  # Optimizer
         if self.scaler is not None:
             data["scaler"] = self.scaler.state_dict()
         torch.save(data, checkpoint_path)
+
         # Save down all the loss values produced by models training since the last caching
-        cols = ["step", "G_loss", "E_loss", "D_loss", "D_loss_real", "D_loss_fake", "grad_penalty"]
+        if pretrain:
+            train_loss_cols = ["step", "prior_loss", "recon_loss", "latent_cycle_loss"]
+            val_loss_cols = []
+        else:
+            train_loss_cols = ["step", "G_loss", "E_loss", "D_loss", "D_loss_real", "D_loss_fake",
+                               "grad_penalty"]
+            val_loss_cols = ["step", "E_avg", "E_std", "E_NLL", "D_real", "D_fake"]
+
         # Convert the train losses to a pd.DataFrame and save down the results
-        df = pd.DataFrame(self.train_losses, columns=cols)
-        df.to_csv(os.path.join(self.losses_folder, f"train-losses-{milestone}.csv"))
+        df = pd.DataFrame(self.train_losses, columns=train_loss_cols)
+        losses_folder = self.pretrain_losses_folder if pretrain else self.losses_folder
+        df.to_csv(os.path.join(losses_folder, f"train-losses-{milestone}.csv"))
+
         # Convert the validation losses to a pd.DataFrame and save down the results
-        cols = ["step", "E_avg", "E_std", "E_NLL", "D_real", "D_fake"]
         if len(self.val_losses) > 0:
-            df = pd.DataFrame(self.val_losses, columns=cols)
+            df = pd.DataFrame(self.val_losses, columns=val_loss_cols)
             df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
 
-    def load(self, milestone: int) -> None:
+    def load(self, milestone: int, pretrain: bool = False) -> None:
         """
         Loads in the cached weights and training state from disk for a particular milestone.
 
@@ -338,7 +362,7 @@ class Trainer:
         # latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean() # Regularize towards each z_dim to be mean 0
         # latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean() # Regularize towards each z_dim to be stddev 1
         latent_norm_loss = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
-        E_loss += latent_norm_loss # Add the regularization penalty to encourage N(0, 1) behavior
+        E_loss += latent_norm_loss  # Add the regularization penalty to encourage N(0, 1) behavior
 
         set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
         return E_loss
@@ -412,19 +436,19 @@ class Trainer:
         if self.step % 100 == 0:
             print(f"Step: {self.step}")
             print("   ",
-                f"D_real={D_loss_real.item():.1f}",
-                f"D_fake={D_loss_fake.item():.1f}",
-            )
+                  f"D_real={D_loss_real.item():.1f}",
+                  f"D_fake={D_loss_fake.item():.1f}",
+                  )
 
             print("   ",
-                f"|z|={z.norm(dim=1).mean():.2f}",
-                f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",
-            )
+                  f"|z|={z.norm(dim=1).mean():.2f}",
+                  f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",
+                  )
 
             print("   ",
-                f"GP={grad_penalty.item():.2f}",
-                f"grad_norm={grad_norm.mean().item():.2f}",
-            )
+                  f"GP={grad_penalty.item():.2f}",
+                  f"grad_norm={grad_norm.mean().item():.2f}",
+                  )
 
         return D_loss, D_loss_real, D_loss_fake, grad_penalty
 
@@ -462,6 +486,101 @@ class Trainer:
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), self.grad_clip)
             opt.step()  # Update the model parameters by taking a gradient step
         return float(grad_norm)
+
+    def pretrain(self) -> None:
+        """
+        Runs pre-training on the Generator, Encoder, and ClassEmbeddings models using an auto-encoder
+        reconstruction loss approach to pre-train these models to a baseline level of performance before
+        introducing the full adversarial training paradigm by adding the discriminator.
+
+        Here we will use real images (x_real) from the training set and compute:
+            z_pred = E(x_real) with regularization towards the N(0, I) prior
+            x_hat = G(E(x_real)) with an L1 loss vs the original real images
+            z_pred = E(G(z)) with an L2 loss vs the original z vector
+
+        This will help the generator learn to create realistic looking images and the encoder to learn to
+        create z vectors near the expected N(0, I) prior latent distribution.
+        """
+        self.logger.info(f"Starting Pre-Training, device={self.device}, amp_dtype={self.amp_dtype}")
+        for model in self.models:  # Report the learning rate and weight decay of all the models
+            self.logger.info(model.name)
+            for i, param_group in enumerate(getattr(self, f"opt_{model.name}").param_groups):
+                self.logger.info(f"lr={param_group['lr']}, wd={param_group['weight_decay']}")
+                break  # Show for only the first parameter group, assume all are the same
+
+            model.to(self.device)  # Move the model to the correct device if not already there
+            model.train()  # Make sure to set the model to train mode for training
+
+        inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
+
+        with tqdm(initial=self.pretrain_step, total=self.pretrain_num_steps) as pbar:
+            while self.pretrain_step < self.pretrain_num_steps:  # Run all pre-training iterations
+
+                for model_name in ["generator", "encoder", "class_embeddings"]:
+                    getattr(self, f"opt_{model_name}").zero_grad(set_to_none=True)
+
+                batch = next(inf_dataloader)
+                x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
+                class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
+                class_embed = self.class_embedding(class_id)  # (B, z_zim)
+
+                ### Compute z_pred = E(x_real) with regularization towards the N(0, I) prior
+                z_pred = self.encoder(x_real, class_embed)  # Encoder z prediction (B, z_dim)
+                # Add the regularization penalty to encourage N(0, 1) behavior
+                mean_loss = z_pred.mean(dim=0).pow(2).mean()  # Encourage each dim to be mean zero
+                std_loss = (z_pred.std(dim=0) - 1).pow(2).mean()  # and stddev 1
+                prior_loss = mean_loss + std_loss
+                # prior_loss = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)
+
+                ### Compute x_hat = G(E(x_real)) with an L1 loss vs the original real images
+                x_hat = self.generator(z_pred, class_embed)  # Generate reconstructions (B, 3, 128, 128)
+                recon_loss = F.l1_loss(x_hat, x_real)
+
+                # Compute z_pred = E(G(z)) with an L2 loss vs the original z vector
+                batch_size = len(x_real)  # Will be <= self.batch_size
+                z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
+                z_pred = self.encoder(self.generator(z, class_embed), class_embed)  # (B, z_dim)
+                latent_cycle_loss = F.smooth_l1_loss(z_pred, z)  # MSE loss wrt the latent vector
+
+                ### Compute a gradient update now that the loss has been computed
+                loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss
+                self.compute_gradients(loss)  # Call backwards() on the loss to compute gradients
+                G_grad = self.optimizer_step(self.generator)  # Update model params of G
+                E_grad = self.optimizer_step(self.encoder)  # Update model params of E
+                CE_grad = self.optimizer_step(self.class_embedding)  # Update the class embedding model params
+                if self.scaler is not None:  # Only call update() iff using this approach
+                    self.scaler.update()
+
+                pbar.set_postfix(
+                    prior_loss=f"{prior_loss.item():.2f}", recon_loss=f"{recon_loss.item():.2f}",
+                    latent_cycle_loss=f"{latent_cycle_loss.item():.2f}",
+                    G_grad=f"{G_grad:.2f}", E_grad=f"{E_grad:.2f}", CE_grad=f"{CE_grad:.2f}"
+                )
+
+                ### Aggregate all the loss values for each timestep, record separately for each
+                self.train_losses.append((self.pretrain_step, prior_loss.item(), recon_loss.item(),
+                                          latent_cycle_loss.item()))
+                self.pretrain_step += 1
+
+                ### Periodically run evaluation metrics on the validation data set, always on the last iter
+                if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
+                    with torch.no_grad():  # Compute without gradient tracking
+                        self.generate_samples(self.pretrain_samples_folder)
+
+                ### Periodically save the model weights to disk, always on the last iter too
+                if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.pretrain_num_steps:
+                    self.save(self.pretrain_step, True)
+                    # Clear the list of losses after each save, store only the ones from the last save to
+                    # the next save
+                    self.train_losses, self.val_losses = [], []
+                    # Generate new loss plots after saving additional loss data to disk
+                    generate_loss_plots(self.pretrain_losses_folder, self.results_folder)
+                    torch.cuda.empty_cache()
+                    gc.collect()  # This will slow down training if called too often
+
+                del batch, x_real, class_id, class_embed, z_pred, z, prior_loss, recon_loss
+                del latent_cycle_loss, loss, G_grad, E_grad, CE_grad
+                pbar.update(1)
 
     def train(self) -> None:
         """
@@ -531,7 +650,7 @@ class Trainer:
 
                 ### Periodically save the model weights to disk, always on the last iter too
                 if self.step % self.save_every == 0 or self.step == self.train_num_steps:
-                    self.save(self.step)
+                    self.save(self.step, False)
                     # Clear the list of losses after each save, store only the ones from the last save to
                     # the next save
                     self.train_losses, self.val_losses = [], []
@@ -542,6 +661,25 @@ class Trainer:
 
                 del batch, G_loss, E_loss, D_loss
                 pbar.update(1)
+
+    @compute_with_amp
+    def generate_samples(self, samples_folder: str):
+        """
+        Runs G(z) to create a grid of images, 1 for each class. Results are saved to disk.
+        """
+        for model in [self.generator, self.class_embedding]:
+            model.eval()
+
+        class_id = torch.tensor(list(range(self.class_embedding.num_classes)), device=self.device)  # (B, )
+        class_embed = self.class_embedding(class_id)  # (B, z_zim)
+        z = torch.randn(len(class_id), self.z_dim, device=self.device)  # (B, z_dim)
+        x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
+        # Save down the results to a grid of images, one for each image class
+        titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
+        save_images(x_fake, titles, 8, os.path.join(samples_folder, f"sample-{self.step}.png"))
+
+        for model in [self.generator, self.class_embedding]:
+            model.train()
 
     @compute_with_amp
     def run_eval(self):
@@ -555,14 +693,7 @@ class Trainer:
         ### 1). Generator Eval - Generate a few sample images for each class so that we can track the
         # progression of  the generator model over time. We expect to see image clarity gradually improve
         # and hope to avoid mode collapse
-        class_id = torch.tensor(list(range(self.class_embedding.num_classes)), device=self.device)  # (B, )
-        class_embed = self.class_embedding(class_id)  # (B, z_zim)
-        z = torch.randn(len(class_id), self.z_dim, device=self.device)  # (B, z_dim)
-        x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
-        # Save down the results to a grid of images, one for each image class
-        titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
-        save_images(x_fake, titles, 8, os.path.join(self.samples_folder, f"sample-{self.step}.png"))
-        self.generator.train()
+        self.generate_samples(self.samples_folder)
 
         ### Encoder and Discriminator Eval
         z_pred_all = []

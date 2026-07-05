@@ -11,6 +11,7 @@ training: # Specify parameters used for training
   lambda_val: 20.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
   lr: 5.5e-5 # 1.0e-4
   weight_decay: 0.0e-0
+  pretrain_num_steps: 100000
   train_num_steps: 300000
   adam_betas: [ 0.0, 0.9 ]
   grad_clip: 1.0
