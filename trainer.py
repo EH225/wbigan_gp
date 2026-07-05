@@ -516,7 +516,7 @@ class Trainer:
         with tqdm(initial=self.pretrain_step, total=self.pretrain_num_steps) as pbar:
             while self.pretrain_step < self.pretrain_num_steps:  # Run all pre-training iterations
 
-                for model_name in ["generator", "encoder", "class_embeddings"]:
+                for model_name in ["generator", "encoder", "class_embedding"]:
                     getattr(self, f"opt_{model_name}").zero_grad(set_to_none=True)
 
                 batch = next(inf_dataloader)
