@@ -360,12 +360,13 @@ class Trainer:
 
         # Train the encoder to produce z vectors that the critic assigns high scores to
         E_loss = (-1) * self.discriminator(x_real, z_pred, class_embed).mean()
+        set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
+
         # Add regularization to encourage the z_pred distribution to directly match that of the prior (N, I)
         latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean()  # Regularize towards each z_dim to be mean 0
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
-        # latent_reg = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
+        latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
         E_loss += latent_reg  # Add the regularization penalty to encourage N(0, 1) behavior
-        set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
         return E_loss
 
     @compute_with_amp
