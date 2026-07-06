@@ -506,8 +506,8 @@ class Trainer:
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):  # Load the most recent checkpoint if applicable
-            self.load_latest_checkpoint(pretrain=False)
+        if config_dict.get("use_latest_checkpoint", pretrain=True):
+            self.load_latest_checkpoint(pretrain=True)
 
         self.logger.info(f"Starting Pre-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
@@ -610,7 +610,7 @@ class Trainer:
         config_dict = self.config["training"]  # Use the Bi-GAN training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):  # Load the most recent checkpoint if applicable
+        if config_dict.get("use_latest_checkpoint", pretrain=False):
             self.load_latest_checkpoint(pretrain=False)
 
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
