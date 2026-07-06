@@ -656,9 +656,9 @@ class Trainer:
                     self.scaler.update()
 
                 pbar.set_postfix(
-                    G_loss=f"{G_loss.item():.4f}", G_grad=f"{G_grad:.3f}",
-                    E_loss=f"{E_loss.item():.4f}", E_grad=f"{E_grad:.3f}",
-                    D_loss=f"{D_loss.item():.4f}", D_grad=f"{D_grad:.3f}", )
+                    G_loss=f"{G_loss.item():.1f}", G_grad=f"{G_grad:.1f}",
+                    E_loss=f"{E_loss.item():.1f}", E_grad=f"{E_grad:.1f}",
+                    D_loss=f"{D_loss.item():.1f}", D_grad=f"{D_grad:.1f}", )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
                 self.train_losses.append((self.step, G_loss.item(), E_loss.item(), D_loss.item(),

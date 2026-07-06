@@ -21,13 +21,13 @@ training: # Specify parameters used for training
   batch_size: 64
   lr: 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
-  num_steps: 300000
+  num_steps: 100000
   adam_betas: [0.9, 0.999]
   grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
-  eval_every: 1000
-  save_every: 1000
+  eval_every: 200
+  save_every: 200
   critic_updates: 3 # The number of updates to the discriminator for every update to G and E
   lambda_val: 15.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
 
