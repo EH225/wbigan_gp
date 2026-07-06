@@ -506,7 +506,7 @@ class Trainer:
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", pretrain=True):
+        if config_dict.get("use_latest_checkpoint", True):
             self.load_latest_checkpoint(pretrain=True)
 
         self.logger.info(f"Starting Pre-Training, device={self.device}, amp_dtype={self.amp_dtype}")
@@ -610,7 +610,7 @@ class Trainer:
         config_dict = self.config["training"]  # Use the Bi-GAN training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", pretrain=False):
+        if config_dict.get("use_latest_checkpoint", True):
             self.load_latest_checkpoint(pretrain=False)
 
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
