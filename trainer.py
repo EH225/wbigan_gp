@@ -7,7 +7,6 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CURRENT_DIR)
 
 import torch
-import argparse
 import psutil
 import math
 import torch.nn as nn
@@ -84,17 +83,6 @@ class Trainer:
         """
         super().__init__()
         self.config = config  # Record config parameters passed
-
-        ### Extract training parameters from the config dict
-        defaults = [("batch_size", 256), ("critic_updates", 5), ("lambda_val", 10.0), ("lr", 1.0e-4),
-                    ("weight_decay", 0.0e-0), ("pretrain_num_steps", 100000), ("train_num_steps", 400000),
-                    ("adam_betas", (0.0, 0.9)), ("grad_clip", 5.0), ("use_amp", True),
-                    ("use_latest_checkpoint", True), ("eval_every", 10000), ("save_every", 5000)]
-        for param_name, default_val in defaults:  # Extract from config dict if possible, otherwise use
-            # the default value for each parameter defined immediately above
-            default_val = tuple(default_val) if param_name == "adam_betas" else default_val
-            setattr(self, param_name, config["training"].get(param_name, default_val))
-
         setattr(self, "z_dim", config["models"].get("z_dim", 128))
 
         ### Set up folders for the output (samples images), losses, and model checkpoints
@@ -149,15 +137,35 @@ class Trainer:
 
         ### Set up other training variables required
         self.device = get_device()  # Auto-detect what device to use for training
-        self.amp_dtype = get_amp_dtype(self.device) if self.use_amp else None
         # Save a pointers to the train and validation dataloaders
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
-        self.pretrain_step = 0  # Training step counter for pre-training
-        self.step = 0  # Training step counter, will train until this reaches train_num_steps
+        self.step = 0  # Training step counter, will train until this reaches num_steps
         self.train_losses, self.val_losses = [], []  # Aggregate loss values during training
 
+    def extract_config_params(self, config_dict: dict) -> None:
+        """
+        This method extracts relevant parameters from config_dict and sets them as attributes of self.
+        e.g. self.critic_updates = config_dict["critic_updates"].
+        """
+        ### Extract training parameters from the config dict
+        defaults = [("batch_size", 64), ("lr", 1.0e-4), ("weight_decay", 0.0e-0), ("num_steps", 100000),
+                    ("adam_betas", (0.9, 0.999)), ("grad_clip", 1.0), ("use_amp", True),
+                    ("use_latest_checkpoint", True), ("eval_every", 10000), ("save_every", 5000),
+                    ("critic_updates", 5), ("lambda_val", 10.0)  # These last 2 are specific to training only
+                    ]
+        for param_name, default_val in defaults:  # Extract from config dict if possible, otherwise use
+            # the default value for each parameter defined immediately above
+            default_val = tuple(default_val) if param_name == "adam_betas" else default_val
+            setattr(self, param_name, config_dict.get(param_name, default_val))
+
+    def create_optimizers(self, config_dict: dict) -> None:
+        """
+        Creates optimizers for each of the models using parameters recorded in config_dict. Optimizers are
+        created and saved as attributes to self.
+        """
         ### Configure optimizers for training each model, exclude bias and norm layers from weight decay
+        self.amp_dtype = get_amp_dtype(self.device) if config_dict["use_amp"] else None
         norm_layers = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm, nn.LayerNorm)
         for model in self.models:  # Create a separate Adam optimizer for each model
             decay_params, no_decay_params = [], []
@@ -181,30 +189,38 @@ class Trainer:
             assert (len(decay_params) + len(no_decay_params) == sum(p.requires_grad
                                                                     for p in model.parameters()))
             opt = torch.optim.Adam([
-                {'params': decay_params, 'weight_decay': self.weight_decay},
+                {'params': decay_params, 'weight_decay': config_dict["weight_decay"]},
                 {'params': no_decay_params, 'weight_decay': 0.0}
-            ], lr=self.lr, betas=self.adam_betas)
+            ], lr=config_dict["lr"], betas=config_dict["adam_betas"])
             setattr(self, f"opt_{model.name}", opt)  # e.g. self.opt_generator
 
         # Create 1 grad scaler for all models to use
         self.scaler = torch.amp.GradScaler("cuda") if self.amp_dtype == torch.float16 else None
 
-        ### Load in weights from disk if resuming training from a prior checkpoint. We always load in the
-        # non-pretraining model checkpoint if one is available
-        if self.use_latest_checkpoint:
-            checkpoints = os.listdir(self.checkpoints_folder)  # Get all files listed in the directory
-            if len(checkpoints) > 0:  # If there are any, we can load the latest one
-                pretrain_checkpoints = [x for x in checkpoints if x.startswith("pretrain-model")
-                                        and x.endswith(".pt")]
-                model_checkpoints = [x for x in checkpoints if x.startswith("model") and x.endswith(".pt")]
-                if len(model_checkpoints) > 0:
-                    last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
-                                           for x in model_checkpoints if x.endswith(".pt")])
-                    self.load(last_checkpoint, False)  # Load in the most recent milestone to continue
-                elif len(pretrain_checkpoints) > 0:
-                    last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
-                                           for x in pretrain_checkpoints if x.endswith(".pt")])
-                    self.load(last_checkpoint, True)
+    def load_latest_checkpoint(self, pretrain: bool = False) -> None:
+        """
+        Loads in weights and optimizer states cached to disk of the latest checkpoint if called.
+        """
+        all_checkpoints = os.listdir(self.checkpoints_folder)  # Get all files listed in the directory
+        # Split into pretrain and non-pretrain checkpoints
+        pretrain_checkpoints = [x for x in all_checkpoints if x.startswith("pretrain-model")
+                                and x.endswith(".pt")]
+        model_checkpoints = [x for x in all_checkpoints if x.startswith("model") and x.endswith(".pt")]
+
+        # If there are any prior checkpoints, attempt to load the latest one
+        if pretrain and len(pretrain_checkpoints) > 0:
+            last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
+                                   for x in pretrain_checkpoints if x.endswith(".pt")])
+            self.load(last_checkpoint, True)  # Load in the most recent milestone to continue
+        elif len(all_checkpoints) > 0:  # Load model checkpoints first, if none, then load pretrained instead
+            if len(model_checkpoints) > 0:
+                last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
+                                       for x in model_checkpoints if x.endswith(".pt")])
+                self.load(last_checkpoint, False)
+            elif len(pretrain_checkpoints) > 0:
+                last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
+                                       for x in pretrain_checkpoints if x.endswith(".pt")])
+                self.load(last_checkpoint, True)
 
     def save(self, milestone: int, pretrain: bool = False) -> None:
         """
@@ -296,24 +312,6 @@ class Trainer:
             )
         else:
             self.logger.info(f"RAM={cpu_ram_gb:.2f} GB")
-
-    # def report_lr_opt_state(self) -> None:
-    #     """
-    #     Reports on the current optimizer learning rate and state via logging.
-    #     """
-    #     lr = self.opt.param_groups[0]['lr']
-    #     exp_avg_norm = torch.stack([
-    #         s['exp_avg'].norm() for s in self.opt.state.values() if 'exp_avg' in s
-    #     ]).mean().item()
-    #     exp_avg_sq_norm = torch.stack([
-    #         s['exp_avg_sq'].norm() for s in self.opt.state.values() if 'exp_avg_sq' in s
-    #     ]).mean().item()
-
-    #     last_lr = self.scheduler.get_last_lr()[0]
-    #     self.logger.info(
-    #         f"step={self.step} | lr={lr:.2e} | scheduler_lr={last_lr:.2e} | "
-    #         f"exp_avg_norm={exp_avg_norm:.4f} | exp_avg_sq_norm={exp_avg_sq_norm:.4f}"
-    #     )
 
     @compute_with_amp
     def compute_G_loss(self, batch: Dict) -> torch.Tensor:
@@ -505,6 +503,12 @@ class Trainer:
         This will help the generator learn to create realistic looking images and the encoder to learn to
         create z vectors near the expected N(0, I) prior latent distribution.
         """
+        config_dict = self.config["pretraining"]  # Use the pretraining config settings
+        self.extract_config_params(config_dict)  # Set param values as attributes of self
+        self.create_optimizers(config_dict)  # Init optimizers with config params
+        if config_dict.get("use_latest_checkpoint", True):  # Load the most recent checkpoint if applicable
+            self.load_latest_checkpoint(pretrain=False)
+
         self.logger.info(f"Starting Pre-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
             self.logger.info(model.name)
@@ -517,8 +521,8 @@ class Trainer:
 
         inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
 
-        with tqdm(initial=self.pretrain_step, total=self.pretrain_num_steps) as pbar:
-            while self.pretrain_step < self.pretrain_num_steps:  # Run all pre-training iterations
+        with tqdm(initial=self.pretrain_step, total=self.num_steps) as pbar:
+            while self.pretrain_step < self.num_steps:  # Run all pre-training iterations
 
                 for model_name in ["generator", "encoder", "class_embedding"]:
                     getattr(self, f"opt_{model_name}").zero_grad(set_to_none=True)
@@ -538,7 +542,7 @@ class Trainer:
 
                 ### Compute x_hat = G(E(x_real) + noise) with an L1 loss vs the original real images
                 # Add a little noise to the encoder outputs so that the generator learns to handle the region
-                # around E(x_real) and not just the exact outputs directly, this is a regularizer effect
+                # around E(x_real) and not just the exact outputs directly, this is a regularizing effect
                 z_noisy = z_pred + 0.05 * torch.randn_like(z_pred)
                 x_hat = self.generator(z_noisy, class_embed)  # Generate reconstructions (B, 3, 128, 128)
                 recon_loss = F.l1_loss(x_hat, x_real)
@@ -570,7 +574,7 @@ class Trainer:
                 self.pretrain_step += 1
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
-                if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.pretrain_num_steps:
+                if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
@@ -578,13 +582,13 @@ class Trainer:
                         save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
-                        print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean()}:.2f")
+                        print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean():.2f}")
                         print(f"mean_loss: {mean_loss:.3f}, std_loss: {std_loss:.3f}")
                         print(f"Avg |E(x)|, {z_pred.mean(dim=1).abs().mean(dim=0):.2f}",
                               f"Avg std(x), {z_pred.std(dim=1).mean(dim=0):.2f}")
 
                 ### Periodically save the model weights to disk, always on the last iter too
-                if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.pretrain_num_steps:
+                if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.num_steps:
                     self.save(self.pretrain_step, True)
                     # Clear the list of losses after each save, store only the ones from the last save to
                     # the next save
@@ -600,9 +604,15 @@ class Trainer:
 
     def train(self) -> None:
         """
-        Runs the training loop for the Wasserstein Bi-GAN until completion for self.train_num_steps total
+        Runs the training loop for the Wasserstein Bi-GAN until completion for self.num_steps total
         training iterations.
         """
+        config_dict = self.config["training"]  # Use the Bi-GAN training config settings
+        self.extract_config_params(config_dict)  # Set param values as attributes of self
+        self.create_optimizers(config_dict)  # Init optimizers with config params
+        if config_dict.get("use_latest_checkpoint", True):  # Load the most recent checkpoint if applicable
+            self.load_latest_checkpoint(pretrain=False)
+
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
             self.logger.info(model.name)
@@ -615,8 +625,8 @@ class Trainer:
 
         inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
 
-        with tqdm(initial=self.step, total=self.train_num_steps) as pbar:
-            while self.step < self.train_num_steps:  # Run until all training iterations are complete
+        with tqdm(initial=self.step, total=self.num_steps) as pbar:
+            while self.step < self.num_steps:  # Run until all training iterations are complete
                 ### Perform K updates to the critic model first
                 for _ in range(self.critic_updates):
                     batch = next(inf_dataloader)
@@ -660,12 +670,12 @@ class Trainer:
                     self.report_memory_usage()  # Report info about the memory usage
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
-                if self.step % self.eval_every == 0 or self.step == self.train_num_steps:
+                if self.step % self.eval_every == 0 or self.step == self.num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
                         self.run_eval()
 
                 ### Periodically save the model weights to disk, always on the last iter too
-                if self.step % self.save_every == 0 or self.step == self.train_num_steps:
+                if self.step % self.save_every == 0 or self.step == self.num_steps:
                     self.save(self.step, False)
                     # Clear the list of losses after each save, store only the ones from the last save to
                     # the next save

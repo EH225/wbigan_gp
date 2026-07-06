@@ -27,8 +27,9 @@ def run_pretraining(config_name: str, dataset_dir: str) -> None:
     :return: None.
     """
     config = read_yaml(os.path.join(CURRENT_DIR, "config", f"{config_name}.yml"))
-    dataloaders = {"train": get_dataloader(dataset_dir, "train", config["training"].get("batch_size", 128)),
-                   "val": get_dataloader(dataset_dir, "val", config["training"].get("batch_size", 128))}
+    dataloaders = {
+        "train": get_dataloader(dataset_dir, "train", config["pretraining"].get("batch_size", 64)),
+        "val": get_dataloader(dataset_dir, "val", config["pretraining"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
     trainer.pretrain()
 
@@ -47,8 +48,9 @@ def run_training(config_name: str, dataset_dir: str) -> None:
     :return: None.
     """
     config = read_yaml(os.path.join(CURRENT_DIR, "config", f"{config_name}.yml"))
-    dataloaders = {"train": get_dataloader(dataset_dir, "train", config["training"].get("batch_size", 128)),
-                   "val": get_dataloader(dataset_dir, "val", config["training"].get("batch_size", 128))}
+    dataloaders = {
+        "train": get_dataloader(dataset_dir, "train", config["training"].get("batch_size", 64)),
+        "val": get_dataloader(dataset_dir, "val", config["training"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
     trainer.train()
 

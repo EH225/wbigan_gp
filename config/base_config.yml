@@ -5,17 +5,29 @@ models: # Define model parameters
   z_dim: 128 # Latent vector dimension
   num_classes: 37 # The number of conditional class IDs
 
-training: # Specify parameters used for training
+pretraining: # Specify parameters used for pretraining
   batch_size: 64
-  critic_updates: 3 # The number of updates to the discriminator for every update to G and E
-  lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
-  lr: 1.0e-4  # 5.5e-5
+  lr: 1.0e-4
   weight_decay: 1.0e-5
-  pretrain_num_steps: 20000
-  train_num_steps: 300000
+  num_steps: 20000
   adam_betas: [0.9, 0.999]
   grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 1000
   save_every: 1000
+
+training: # Specify parameters used for training
+  batch_size: 64
+  lr: 1.0e-4  # 5.5e-5
+  weight_decay: 0.0e-0
+  num_steps: 300000
+  adam_betas: [0.9, 0.999]
+  grad_clip: 1.0
+  use_amp: True
+  use_latest_checkpoint: True
+  eval_every: 1000
+  save_every: 1000
+  critic_updates: 3 # The number of updates to the discriminator for every update to G and E
+  lambda_val: 15.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
+
