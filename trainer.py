@@ -689,7 +689,7 @@ class Trainer:
                 pbar.update(1)
 
     @compute_with_amp
-    def generate_samples(self, pretrain: bool = False):
+    def generate_samples(self, pretrain: bool = False, seed: int = None):
         """
         Runs G(z) to create a grid of images, 1 for each class. Results are saved to disk.
         """
@@ -698,7 +698,11 @@ class Trainer:
 
         class_id = torch.tensor(list(range(self.class_embedding.num_classes)), device=self.device)  # (B, )
         class_embed = self.class_embedding(class_id)  # (B, z_zim)
-        z = torch.randn(len(class_id), self.z_dim, device=self.device)  # (B, z_dim)
+
+        rng = torch.Generator(device=self.device)  # Get up a random number generator
+        if seed is not None:  # Set the seed if one is provided for replicability
+            rng.manual_seed(seed)
+        z = torch.randn(len(class_id), self.z_dim, device=self.device, generator=rng)  # (B, z_dim)
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
@@ -721,7 +725,7 @@ class Trainer:
         ### 1). Generator Eval - Generate a few sample images for each class so that we can track the
         # progression of  the generator model over time. We expect to see image clarity gradually improve
         # and hope to avoid mode collapse
-        self.generate_samples(pretrain=False)
+        self.generate_samples(pretrain=False, seed=2026)
 
         ### Encoder and Discriminator Eval
         z_pred_all = []
