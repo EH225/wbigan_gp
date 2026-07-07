@@ -597,11 +597,13 @@ class Trainer:
                 CE_grad = self.optimizer_step(self.class_embedding)  # Update the class embedding model params
                 if self.scaler is not None:  # Only call update() iff using this approach
                     self.scaler.update()
-                msg = f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f}"
-                msg += f"recon_loss: {recon_loss.item():.2f}, "
-                msg += f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, G_grad: {G_grad:.2f}"
-                msg += f"E_grad: {E_grad:.2f}, CE_grad: {CE_grad:.2f}"
-                pbar.set_postfix(msg)
+
+                pbar.set_postfix_str(
+                    f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f}"
+                    f"recon_loss: {recon_loss.item():.2f}, "
+                    f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, G_grad: {G_grad:.2f}"
+                    f"E_grad: {E_grad:.2f}, CE_grad: {CE_grad:.2f}"
+                )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
                 self.train_losses.append((self.step, prior_loss.item(), recon_loss.item(),
