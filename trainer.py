@@ -277,7 +277,7 @@ class Trainer:
         self.logger.info(f"Loading model from {checkpoint_path}.")
 
         if weights_only:
-            self.logger.info("Loading only model weight, leaving all else as default")
+            self.logger.info("Loading only model weights, leaving all else as default")
             for model in self.models:
                 getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
 
