@@ -235,7 +235,7 @@ class Trainer:
         file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
         checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
         self.logger.info(f"Saving model to {checkpoint_path}.")
-        data = {"step": self.pretrain_step} if pretrain else {"step": self.step}
+        data = {"step": self.step}
         for model in self.models:
             data[model.name] = getattr(self, model.name).state_dict()  # Model weights
             data[f"opt_{model.name}"] = getattr(self, f"opt_{model.name}").state_dict()  # Optimizer
@@ -524,8 +524,8 @@ class Trainer:
 
         inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
 
-        with tqdm(initial=self.pretrain_step, total=self.num_steps) as pbar:
-            while self.pretrain_step < self.num_steps:  # Run all pre-training iterations
+        with tqdm(initial=self.step, total=self.num_steps) as pbar:
+            while self.step < self.num_steps:  # Run all pre-training iterations
 
                 for model_name in ["generator", "encoder", "class_embedding"]:
                     getattr(self, f"opt_{model_name}").zero_grad(set_to_none=True)
@@ -572,16 +572,16 @@ class Trainer:
                 )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
-                self.train_losses.append((self.pretrain_step, prior_loss.item(), recon_loss.item(),
+                self.train_losses.append((self.step, prior_loss.item(), recon_loss.item(),
                                           latent_cycle_loss.item()))
-                self.pretrain_step += 1
+                self.step += 1
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
-                if self.pretrain_step % self.eval_every == 0 or self.pretrain_step == self.num_steps:
+                if self.step % self.eval_every == 0 or self.step == self.num_steps:
                     with torch.no_grad():  # Compute without gradient tracking
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
-                        file_name = f"reconstructions-{self.pretrain_step}.png"
+                        file_name = f"reconstructions-{self.step}.png"
                         save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
@@ -591,8 +591,8 @@ class Trainer:
                               f"Avg std(x), {z_pred.std(dim=1).mean(dim=0):.2f}")
 
                 ### Periodically save the model weights to disk, always on the last iter too
-                if self.pretrain_step % self.save_every == 0 or self.pretrain_step == self.num_steps:
-                    self.save(self.pretrain_step, True)
+                if self.step % self.save_every == 0 or self.step == self.num_steps:
+                    self.save(self.step, True)
                     # Clear the list of losses after each save, store only the ones from the last save to
                     # the next save
                     self.train_losses, self.val_losses = [], []
@@ -710,8 +710,7 @@ class Trainer:
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
         samples_folder = self.pretrain_samples_folder if pretrain else self.samples_folder
-        file_name = f"sample-{self.pretrain_step}.png" if pretrain else f"sample-{self.step}.png"
-        save_images(x_fake, titles, 8, os.path.join(samples_folder, file_name))
+        save_images(x_fake, titles, 8, os.path.join(samples_folder, f"sample-{self.step}.png"))
 
         for model in [self.generator, self.class_embedding]:
             model.train()
