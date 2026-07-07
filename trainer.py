@@ -69,6 +69,29 @@ def set_requires_grad(module: nn.Module, requires_grad: bool) -> None:
         p.requires_grad_(requires_grad)
 
 
+def compute_mmd(x, y, sigmas=(1, 2, 4, 8, 16)):
+    """
+    x: (B, D) encoder outputs
+    y: (B, D) prior samples
+    """
+
+    xx = torch.cdist(x, x).pow(2)
+    yy = torch.cdist(y, y).pow(2)
+    xy = torch.cdist(x, y).pow(2)
+
+    mmd = 0.0
+    for sigma in sigmas:
+        gamma = 1.0 / (2 * sigma ** 2)
+
+        Kxx = torch.exp(-gamma * xx)
+        Kyy = torch.exp(-gamma * yy)
+        Kxy = torch.exp(-gamma * xy)
+
+        mmd += Kxx.mean() + Kyy.mean() - 2 * Kxy.mean()
+
+    return mmd
+
+
 class Trainer:
 
     def __init__(self, config: Dict, dataloaders: Dict, **kwargs):
@@ -564,20 +587,21 @@ class Trainer:
                 z_cycle = self.encoder(self.generator(z, class_embed), class_embed)  # (B, z_dim)
                 latent_cycle_loss = F.smooth_l1_loss(z_cycle, z)  # L1 loss wrt the latent vector
 
+                mmd_loss = compute_mmd(z_pred, z)  # Further regularization towards the prior
+
                 ### Compute a gradient update now that the loss has been computed
-                loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss
+                loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss + 10.0 * mmd_loss
                 self.compute_gradients(loss)  # Call backwards() on the loss to compute gradients
                 G_grad = self.optimizer_step(self.generator)  # Update model params of G
                 E_grad = self.optimizer_step(self.encoder)  # Update model params of E
                 CE_grad = self.optimizer_step(self.class_embedding)  # Update the class embedding model params
                 if self.scaler is not None:  # Only call update() iff using this approach
                     self.scaler.update()
-
-                pbar.set_postfix(
-                    prior_loss=f"{prior_loss.item():.2f}", recon_loss=f"{recon_loss.item():.2f}",
-                    latent_cycle_loss=f"{latent_cycle_loss.item():.2f}",
-                    G_grad=f"{G_grad:.2f}", E_grad=f"{E_grad:.2f}", CE_grad=f"{CE_grad:.2f}"
-                )
+                msg = f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f}"
+                msg += f"recon_loss: {recon_loss.item():.2f}, "
+                msg += f"latent_cycle_loss: {latent_cycle_loss.items():.2f}, G_grad: {G_grad:.2f}"
+                msg += f"E_grad: {E_grad:.2f}, CE_grad: {CE_grad:.2f}"
+                pbar.set_postfix(msg)
 
                 ### Aggregate all the loss values for each timestep, record separately for each
                 self.train_losses.append((self.step, prior_loss.item(), recon_loss.item(),
