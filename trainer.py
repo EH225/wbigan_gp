@@ -552,7 +552,9 @@ class Trainer:
                 ### Compute x_hat = G(E(x_real) + noise) with an L1 loss vs the original real images
                 # Add a little noise to the encoder outputs so that the generator learns to handle the region
                 # around E(x_real) and not just the exact outputs directly, this is a regularizing effect
-                z_noisy = z_pred + 0.05 * torch.randn_like(z_pred)
+                alpha = torch.rand(len(z_pred), 1, device=self.device)  # (B, 1) random numbers [0. 1]
+                alpha *= min(0.5, (self.step / self.num_steps))  # Limit to at most [0.0, 0.5]
+                z_noisy = (1 - alpha) * z_pred + alpha * torch.randn_like(z_pred, device=self.device)
                 x_hat = self.generator(z_noisy, class_embed)  # Generate reconstructions (B, 3, 128, 128)
                 recon_loss = F.l1_loss(x_hat, x_real)
 
@@ -560,7 +562,7 @@ class Trainer:
                 batch_size = len(x_real)  # Will be <= self.batch_size
                 z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
                 z_cycle = self.encoder(self.generator(z, class_embed), class_embed)  # (B, z_dim)
-                latent_cycle_loss = F.smooth_l1_loss(z_cycle, z)  # MSE loss wrt the latent vector
+                latent_cycle_loss = F.smooth_l1_loss(z_cycle, z)  # L1 loss wrt the latent vector
 
                 ### Compute a gradient update now that the loss has been computed
                 loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss
