@@ -273,16 +273,22 @@ class Trainer:
         """
         file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
         checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
-        self.logger.info(f"Loading model from {checkpoint_path}.")
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
-        self.step = checkpoint_data["step"]
-        for model in self.models:
-            getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
-            if weights_only is False:  # Also load in the optimizer state as well
+        self.logger.info(f"Loading model from {checkpoint_path}.")
+
+        if weights_only:
+            self.logger.info("Loading only model weight, leaving all else as default")
+            for model in self.models:
+                getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
+
+        else:  # Load everything from the checkpoint, step counter, model weights, opt state, scaler
+            self.step = checkpoint_data["step"]
+            for model in self.models:
+                getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
                 getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
 
-        if self.scaler is not None and "scaler" in checkpoint_data and weights_only is False:
-            self.scaler.load_state_dict(checkpoint_data["scaler"])
+            if self.scaler is not None and "scaler" in checkpoint_data:
+                self.scaler.load_state_dict(checkpoint_data["scaler"])
 
         # Losses are not loaded in, they are saved to disk periodically with the model weights and are not
         # needed to continue training. The losses obtained by training will be cached again at the next save
