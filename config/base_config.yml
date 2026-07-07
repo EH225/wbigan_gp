@@ -2,7 +2,7 @@
 name: wbigan
 
 models: # Define model parameters
-  z_dim: 128 # Latent vector dimension
+  z_dim: 64 # Latent vector dimension
   num_classes: 37 # The number of conditional class IDs
 
 pretraining: # Specify parameters used for pretraining
