@@ -211,16 +211,18 @@ class Trainer:
         if pretrain and len(pretrain_checkpoints) > 0:
             last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
                                    for x in pretrain_checkpoints if x.endswith(".pt")])
-            self.load(last_checkpoint, True)  # Load in the most recent milestone to continue
+            self.load(last_checkpoint, True, False)
+
         elif len(all_checkpoints) > 0:  # Load model checkpoints first, if none, then load pretrained instead
             if len(model_checkpoints) > 0:
                 last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
                                        for x in model_checkpoints if x.endswith(".pt")])
-                self.load(last_checkpoint, False)
+                self.load(last_checkpoint, False, False)
+
             elif len(pretrain_checkpoints) > 0:
                 last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
                                        for x in pretrain_checkpoints if x.endswith(".pt")])
-                self.load(last_checkpoint, True)
+                self.load(last_checkpoint, True, True)
 
     def save(self, milestone: int, pretrain: bool = False) -> None:
         """
@@ -260,25 +262,26 @@ class Trainer:
             df = pd.DataFrame(self.val_losses, columns=val_loss_cols)
             df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
 
-    def load(self, milestone: int, pretrain: bool = False) -> None:
+    def load(self, milestone: int, pretrain: bool = False, weights_only: bool = False) -> None:
         """
         Loads in the cached weights and training state from disk for a particular milestone.
 
         :param milestone: An integer denoting the training timestep at which the model weights were saved.
+        :param pretrain: A bool flag indicating if this milestone is a pretraining milestone.
+        :param weights_only: If True, then only model weights are loaded, nothing else.
         :returns: None. Weights are loaded into the model.
         """
         file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
         checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
         self.logger.info(f"Loading model from {checkpoint_path}.")
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
-        if pretrain:
-            self.pretrain_step = checkpoint_data["step"]
-        else:
-            self.step = checkpoint_data["step"]
+        self.step = checkpoint_data["step"]
         for model in self.models:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
-            getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])  # Opt
-        if self.scaler is not None and "scaler" in checkpoint_data:
+            if weights_only is False:  # Also load in the optimizer state as well
+                getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
+
+        if self.scaler is not None and "scaler" in checkpoint_data and weights_only is False:
             self.scaler.load_state_dict(checkpoint_data["scaler"])
 
         # Losses are not loaded in, they are saved to disk periodically with the model weights and are not
@@ -537,8 +540,8 @@ class Trainer:
                 # Add the regularization penalty to encourage N(0, 1) behavior
                 mean_loss = z_pred.mean(dim=0).pow(2).mean()  # Encourage each dim of z_pred to be mean zero
                 std_loss = (z_pred.std(dim=0) - 1).pow(2).mean()  # and stddev 1
-                prior_loss = mean_loss + std_loss
-                # prior_loss = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)
+                latent_reg = (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
+                prior_loss = mean_loss + std_loss + latent_reg
 
                 ### Compute x_hat = G(E(x_real) + noise) with an L1 loss vs the original real images
                 # Add a little noise to the encoder outputs so that the generator learns to handle the region
