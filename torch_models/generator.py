@@ -97,25 +97,31 @@ class Generator(nn.Module):
     Conditional image generator model for a Wasserstein Bi-GAN.
 
     Starting with an input latent noise vector z of size (B, z_dim), this model returns a collection
-    of up-sampled RGB images of size (B, 3, 128, 128) of pixel values [-1, +1].
+    of up-sampled RGB images of size (B, 3, D, 1D28) of pixel values [-1, +1].
 
     Generator(z, class_embed) -> fake_images
     """
 
-    def __init__(self, z_dim: int = 128):
+    def __init__(self, z_dim: int = 128, image_dim: int = 128):
         """
         Conditional image generator model for a Wasserstein Bi-GAN.
 
-        :param z_zim: The dimension of the input latent noise vector, z. This is also the dimension of the
+        :param z_dim: The dimension of the input latent noise vector, z. This is also the dimension of the
             embedding vectors used to represent each class. The default is 128.
+        :param image_dim: The dimension of the input images used during training and also the output images
+            produced by the Bi-GAN model.
         """
         super().__init__()
         self.name = "generator"
         self.z_dim = z_dim
+        assert image_dim in [128, 64], "image_dim must be one of: [128, 64]"
+        self.image_dim = image_dim
 
         # This fully connected layer maps from the latent noise vector to a larger tensor that
-        # gets reshaped for convolution operations (z_dim, ) -> (512 * 8 * 8) -> (512, 8, 8)
-        self.fc = nn.Linear(z_dim, 512 * 8 * 8)
+        # gets reshaped for convolution operations (z_dim, ) -> e.g. 512 * 8 * 8) -> (512, 8, 8)
+        # for image_dim = 128, otherwise (512, 4, 4) for image_dim = 64 and (512, 2, 2) for image_dim = 32
+        # All examples throughout this module will be using the image_dim=128 default
+        self.fc = nn.Linear(z_dim, 512 * (self.image_dim // 16) ** 2)
 
         # An initial convolution immediately after the linear layer but before the residual
         # blocks to help the network organize the initial learned feature map before upsampling
@@ -154,7 +160,7 @@ class Generator(nn.Module):
 
         :param z: An input latent tensor of size (B, z_dim) to seed the generation process.
         :param class_embed: An input tensor of class label embeddings of size (B, z_dim).
-        :returns: A tensor of size (B, 3, 128, 128) generated images.
+        :returns: A tensor of size (B, 3, image_dim, image_dim) generated images.
         """
         assert z.shape == class_embed.shape, "z.shape must equal class_embed.shape"
         # Concatenate the z-vector with the class embedding vector to create a conditioning vector

@@ -81,18 +81,23 @@ class Encoder(nn.Module):
     Encoder(real_image, class_embed) -> z_hat
     """
 
-    def __init__(self, z_dim: int = 128):
+    def __init__(self, z_dim: int = 128, image_dim: int = 128):
         """
         Conditional image encoder model for a Wasserstein Bi-GAN.
 
-        :param z_zim: The dimension of the output latent noise vector, z. This is also the dimension of the
+        :param z_dim: The dimension of the output latent noise vector, z. This is also the dimension of the
             embedding vectors used to represent each class. The default is 128.
+        :param image_dim: The dimension of the input images used during training and also the output images
+            produced by the Bi-GAN model.
         """
         super().__init__()
         self.name = "encoder"
         self.z_dim = z_dim
+        assert image_dim in [128, 64], "image_dim must be one of: [128, 64]"
+        self.image_dim = image_dim
 
         # An initial convolution before the residual down-sampling conv blocks
+        # All examples throughout this module will be using the image_dim=128 default
         self.input_conv = nn.Conv2d(3, 64, 3, padding=1)  # Out: (B, 64, 128, 128)
 
         # Define the encoder backbone as a series of down-sampling residual conv blocks
@@ -114,7 +119,7 @@ class Encoder(nn.Module):
         """
         Forward pass through the encoder model. Encoder(real_image, class_embed) -> z_hat
 
-        :param x: An input image tensor of size (B, 3, 128, 128) with pixel values [-1, +1].
+        :param x: An input image tensor of size (B, 3, image_dim, image_dim) with pixel values [-1, +1].
         :param class_embed: An input tensor of class label embeddings of size (B, z_dim).
         :returns: A tensor of size (B, z_dim) estimated latent z-vectors.
         """

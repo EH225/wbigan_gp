@@ -599,9 +599,9 @@ class Trainer:
                     self.scaler.update()
 
                 pbar.set_postfix_str(
-                    f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f}"
+                    f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f} "
                     f"recon_loss: {recon_loss.item():.2f}, "
-                    f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, G_grad: {G_grad:.2f}"
+                    f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, G_grad: {G_grad:.2f}, "
                     f"E_grad: {E_grad:.2f}, CE_grad: {CE_grad:.2f}"
                 )
 

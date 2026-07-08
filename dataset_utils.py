@@ -158,6 +158,6 @@ def get_dataloader(dataset_dir: str, split: str, batch_size: int) -> DataLoader:
 if __name__ == "__main__":
     # Pre-process all the images on disk to be [128, 128, 3]
     print("Pre-processing images to be [128, 128, 3]")
-    input_dir = os.path.join(CURRENT_DIR, "dataset", "original", "images")
-    output_dir = os.path.join(CURRENT_DIR, "dataset", "processed", "images")
+    input_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "original", "images")
+    output_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "processed", "images")
     resize_and_crop(input_dir, output_dir, 128)

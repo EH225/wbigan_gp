@@ -1,20 +1,33 @@
-# This config file defines the base approach to training a Wasserstein Bi-GAN - DEBUG CONFIG
-name: wbigan_debug
+# This is a debug config file the config for training a Wasserstein Bi-GAN on the CIFAR-10 dataset
+name: wbigan
 
 models: # Define model parameters
-    z_dim: 5 # Latent vector dimension
-    num_classes: 37 # The number of conditional class IDs
+  z_dim: 64 # Latent vector dimension
+  num_classes: 10 # The number of conditional class IDs
+  image_dim: 128
+
+pretraining: # Specify parameters used for pretraining
+  batch_size: 5
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  num_steps: 100
+  adam_betas: [0.9, 0.999]
+  grad_clip: 1.0
+  use_amp: True
+  use_latest_checkpoint: True
+  eval_every: 25
+  save_every: 50
 
 training: # Specify parameters used for training
-    batch_size: 5
-    critic_updates: 5 # The number of updates to the discriminator for every update to G and E
-    lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
-    lr: 1.0e-4
-    weight_decay: 0.0e-0
-    train_num_steps: 30
-    adam_betas: [0.0, 0.9]
-    grad_clip: 10.0
-    use_amp: True
-    use_latest_checkpoint: True
-    eval_every: 10
-    save_every: 5
+  batch_size: 5
+  lr: 1.0e-4 # 1.0e-4  # 5.5e-5
+  weight_decay: 0.0e-0
+  num_steps: 100
+  adam_betas: [0.0, 0.9]
+  grad_clip: 1.0
+  use_amp: True
+  use_latest_checkpoint: True
+  eval_every: 25
+  save_every: 50
+  critic_updates: 5 # The number of updates to the discriminator for every update to G and E
+  lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition

@@ -1,16 +1,17 @@
-# This config file defines the base approach to training a Wasserstein Bi-GAN
+# This config file the config for training a Wasserstein Bi-GAN on the CIFAR-10 dataset
 name: wbigan
 
 models: # Define model parameters
   z_dim: 64 # Latent vector dimension
-  num_classes: 37 # The number of conditional class IDs
+  num_classes: 10 # The number of conditional class IDs
+  image_dim: 128
 
 pretraining: # Specify parameters used for pretraining
   batch_size: 64
   lr: 1.0e-4
   weight_decay: 1.0e-5
   num_steps: 60000
-  adam_betas: [0.9, 0.999]
+  adam_betas: [ 0.9, 0.999 ]
   grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
@@ -22,7 +23,7 @@ training: # Specify parameters used for training
   lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
   num_steps: 10000
-  adam_betas: [0.9, 0.999]
+  adam_betas: [ 0.0, 0.9 ]
   grad_clip: 2.0
   use_amp: True
   use_latest_checkpoint: True
