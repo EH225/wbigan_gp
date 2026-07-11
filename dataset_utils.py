@@ -260,10 +260,15 @@ def get_class_labels(dataset: str) -> dict:
     elif dataset == "celebA":
         return {}
 
-
+2
 if __name__ == "__main__":
     # Pre-process all the images on disk for the Oxford Pets dataset to be [128, 128, 3]
-    print("Pre-processing oxford pet dataset images to be [128, 128, 3]")
+    print("Pre-processing Oxford Pet dataset images to be [128, 128, 3]")
     input_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "original", "images")
     output_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "images")
     resize_and_crop(input_dir, output_dir, 128)
+
+    print("Pre-processing celebA dataset images to be [64, 64, 3]")
+    input_dir = os.path.join(CURRENT_DIR, "datasets", "celebA", "img_align_celeba")
+    output_dir = os.path.join(CURRENT_DIR, "datasets", "celebA", "images")
+    resize_and_crop(input_dir, output_dir, 64)
