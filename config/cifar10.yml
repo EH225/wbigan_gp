@@ -8,7 +8,7 @@ models: # Define model parameters
   image_dim: 32
 
 pretraining: # Specify parameters used for pretraining
-  batch_size: 256
+  batch_size: 128
   lr: 1.0e-4
   weight_decay: 1.0e-5
   num_steps: 60000
@@ -20,7 +20,7 @@ pretraining: # Specify parameters used for pretraining
   save_every: 5000
 
 training: # Specify parameters used for training
-  batch_size: 256
+  batch_size: 128
   lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
   num_steps: 30000
