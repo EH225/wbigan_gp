@@ -201,6 +201,66 @@ def get_dataloader(datasets_dir: str, dataset: str, split: str, batch_size: int)
                       prefetch_factor=prefetch_factor)
 
 
+def get_class_labels(dataset: str) -> dict:
+    """
+    Returns a dictionary mapping of class_id (int) to class_name (str) for a given dataset.
+    """
+    if dataset == "cifar10":
+        return {
+            0: 'airplane',
+            1: 'automobile',
+            2: 'bird',
+            3: 'cat',
+            4: 'deer',
+            5: 'dog',
+            6: 'frog',
+            7: 'horse',
+            8: 'ship',
+            9: 'truck'
+        }
+    elif dataset == "oxford_pets":
+        return {
+            1: 'Abyssinian',
+            2: 'american_bulldog',
+            3: 'american_pit_bull_terrier',
+            4: 'basset_hound',
+            5: 'beagle',
+            6: 'Bengal',
+            7: 'Birman',
+            8: 'Bombay',
+            9: 'boxer',
+            10: 'British_Shorthair',
+            11: 'chihuahua',
+            12: 'Egyptian_Mau',
+            13: 'english_cocker_spaniel',
+            14: 'english_setter',
+            15: 'german_shorthaired',
+            16: 'great_pyrenees',
+            17: 'havanese',
+            18: 'japanese_chin',
+            19: 'keeshond',
+            20: 'leonberger',
+            21: 'Maine_Coon',
+            22: 'miniature_pinscher',
+            23: 'newfoundland',
+            24: 'Persian',
+            25: 'pomeranian',
+            26: 'pug',
+            27: 'Ragdoll',
+            28: 'Russian_Blue',
+            29: 'saint_bernard',
+            30: 'samoyed',
+            31: 'scottish_terrier',
+            32: 'shiba_inu',
+            33: 'Siamese',
+            34: 'Sphynx',
+            35: 'staffordshire_bull_terrier',
+            36: 'wheaten_terrier',
+            37: 'yorkshire_terrier'}
+    elif dataset == "celebA":
+        return {}
+
+
 if __name__ == "__main__":
     # Pre-process all the images on disk for the Oxford Pets dataset to be [128, 128, 3]
     print("Pre-processing oxford pet dataset images to be [128, 128, 3]")

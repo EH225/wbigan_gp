@@ -23,6 +23,7 @@ from torch_models.generator import Generator
 from torch_models.encoder import Encoder
 from torch_models.discriminator import Discriminator
 from torch_models.shared_components import ClassEmbedding
+from dataset_utils import get_class_labels
 
 
 def infinite_loader(dataloader: DataLoader):
@@ -121,6 +122,8 @@ class Trainer:
         for directory in [self.results_folder, self.checkpoints_folder, self.losses_folder,
                           self.pretrain_losses_folder, self.pretrain_samples_folder, self.samples_folder]:
             os.makedirs(directory, exist_ok=True)  # Create the directory if not already there
+
+        self.class_labels = get_class_labels(config["dataset"])  # A dict mapping int:str for each class label
 
         #### Set up logging during training
         self.logger = logging.getLogger(f"{self.__class__.__name__}_{id(self)}")
@@ -618,7 +621,9 @@ class Trainer:
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
                         file_name = f"reconstructions-{self.step}.png"
-                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 5,
+                        titles = class_id[:40].detach().cpu().tolist()
+                        titles = [f"{i} {self.class_labels[i]}" for i in range(titles)]
+                        save_images(x_hat[:40].detach().cpu(), titles, 5,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
                         print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean():.2f}")
@@ -744,7 +749,7 @@ class Trainer:
         z = torch.randn(len(class_id), self.z_dim, device=self.device, generator=rng)  # (B, z_dim)
         x_fake = self.generator(z, class_embed)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
-        titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
+        titles = [f"{i} {self.class_labels[i]}" for i in range(self.class_embedding.num_classes)]
         samples_folder = self.pretrain_samples_folder if pretrain else self.samples_folder
         save_images(x_fake, titles, 5, os.path.join(samples_folder, f"sample-{self.step}.png"))
 
