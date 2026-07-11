@@ -469,8 +469,8 @@ class Trainer:
         grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
-        if self.step % 100 == 0:
-            print(f"Step: {self.step}")
+        if self.step % 500 == 0:
+            print(f"\nStep: {self.step}")
             print("   ",
                   f"D_real={D_loss_real.item():.1f}",
                   f"D_fake={D_loss_fake.item():.1f}",
@@ -618,7 +618,7 @@ class Trainer:
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
                         file_name = f"reconstructions-{self.step}.png"
-                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 8,
+                        save_images(x_hat[:40].detach().cpu(), class_id[:40].detach().cpu().tolist(), 5,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
                         print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean():.2f}")
@@ -746,7 +746,7 @@ class Trainer:
         # Save down the results to a grid of images, one for each image class
         titles = [f"Class {i}" for i in range(self.class_embedding.num_classes)]
         samples_folder = self.pretrain_samples_folder if pretrain else self.samples_folder
-        save_images(x_fake, titles, 8, os.path.join(samples_folder, f"sample-{self.step}.png"))
+        save_images(x_fake, titles, 5, os.path.join(samples_folder, f"sample-{self.step}.png"))
 
         for model in [self.generator, self.class_embedding]:
             model.train()

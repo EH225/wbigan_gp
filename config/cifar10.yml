@@ -25,10 +25,10 @@ training: # Specify parameters used for training
   weight_decay: 0.0e-0
   num_steps: 30000
   adam_betas: [0.0, 0.9]
-  grad_clip: 1.0
+  grad_clip: 5.0
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 1000
   save_every: 2000
   critic_updates: 3 # The number of updates to the discriminator for every update to G and E
-  lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
+  lambda_val: 15.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
