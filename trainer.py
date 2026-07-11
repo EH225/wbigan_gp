@@ -106,7 +106,9 @@ class Trainer:
         """
         super().__init__()
         self.config = config  # Record config parameters passed
-        setattr(self, "z_dim", config["models"].get("z_dim", 128))
+        setattr(self, "z_dim", config["models"]["z_dim"])
+        setattr(self, "num_classes", config["models"]["num_classes"])
+        setattr(self, "image_dim", config["models"]["image_dim"])
 
         ### Set up folders for the output (samples images), losses, and model checkpoints
         results_folder = os.path.join(CURRENT_DIR, "results", str(config["name"]))
@@ -150,10 +152,10 @@ class Trainer:
         self.logger.setLevel(logging.INFO)
 
         ### Configure the 3 models used in Bi-GAN training
-        self.generator = Generator(self.z_dim)
-        self.encoder = Encoder(self.z_dim)
-        self.discriminator = Discriminator(self.z_dim)
-        self.class_embedding = ClassEmbedding(config["models"].get("num_classes", 37), self.z_dim)
+        self.generator = Generator(self.z_dim, self.image_dim)
+        self.encoder = Encoder(self.z_dim, self.image_dim)
+        self.discriminator = Discriminator(self.z_dim, self.image_dim)
+        self.class_embedding = ClassEmbedding(self.num_classes, self.z_dim)
         self.models = [self.generator, self.encoder, self.discriminator, self.class_embedding]
         for model in self.models:  # Report the number of trainable parameters in each model
             self.logger.info(f"{model.name}: {sum(p.numel() for p in model.parameters())} parameters")

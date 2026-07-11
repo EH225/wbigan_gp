@@ -179,5 +179,4 @@ class Generator(nn.Module):
                 x = block(x)
 
         x = self.to_rgb(x)  # Convert final output to 3 channel RGB outputs [-1, +1]
-
         return x
