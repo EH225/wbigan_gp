@@ -28,7 +28,7 @@ training: # Specify parameters used for training
   grad_clip: 5.0
   use_amp: True
   use_latest_checkpoint: True
-  eval_every: 10
+  eval_every: 1000
   save_every: 2000
   critic_updates: 3 # The number of updates to the discriminator for every update to G and E
   lambda_val: 15.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
