@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-This module contains functions for pre-processing the data set into [128, 128, 3] images and constructs
-the data loaders required for training.
+This module contains functions for pre-processing images to be a given size e.g. [128, 128, 3] and also
+code for dataloaders for various datasets.
 """
 import sys, os
 
@@ -12,7 +12,7 @@ from PIL import Image
 import pandas as pd
 import numpy as np
 from torchvision.transforms import Resize, CenterCrop, InterpolationMode
-from torchvision import transforms
+from torchvision import transforms, datasets
 from utils import get_device
 from tqdm import tqdm
 import torch
@@ -21,6 +21,9 @@ from torch.utils.data import DataLoader
 from typing import Dict, List, Tuple
 
 
+###                      ###
+### Image Pre-Processing ###
+###                      ###
 def resize_and_crop(input_dir: str, output_dir: str, size: int) -> None:
     """
     Resizes and center-crops all images found in input_dir and saves a new copy to output_dir
@@ -51,24 +54,63 @@ def resize_and_crop(input_dir: str, output_dir: str, size: int) -> None:
             img.save(os.path.join(output_dir, img_name))
 
 
+###          ###
+### Datasets ###
+###          ###
+
+
+class CIFAR10Dataset(Dataset):
+    """
+    Dataset for CIFAR-10 which returns [32 x 32 x 3] images and has 10 classes labeled [0-9].
+    """
+
+    def __init__(self, datasets_dir: str, split: str = "train", transform=None):
+        """
+        Initializes the dataset, downloads data if needed.
+
+        :param datasets_dir: A directory where the datasets exists or should be maintained.
+        :param split: The dataset split to use in this dataset i.e. "train" or "val".
+        :param transform: A set of transforms to apply to each image before it is batched.
+        """
+        self.dataset = datasets.CIFAR10(root=datasets_dir, train=(split == "train"),
+                                        download=True, transform=transform)
+
+    def __len__(self):
+        """
+        Returns the total number of images in the dataset.
+        """
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        """
+        Returns a dictionary containing keys "image" and "class_id" for a particular index in the dataset.
+
+        :param idx: An internal image index number from [0, len(self.img_ids) - 1].
+        :returns: A dict with the following format:
+            image: An image of size (C=3, H=32, W=32) as a torch.Tensor
+            class_id: The class_id associated with the image, a unique group identifier
+        """
+        image, label = self.dataset[idx]
+
+        return {"image": image, "class_id": label}
+
+
 class OxfordPetsDataset(Dataset):
     """
-    Dataset used to train the WBiGAN on the Oxford Pets dataset.
+    Dataset for Oxford Pets which returns [128 x 128 x 3] images and has 37 classes labeled [0-36].
     """
 
-    def __init__(self, img_dir: str, meta_path: str, transform=None, split: str = "train"):
+    def __init__(self, dataset_dir: str, split: str = "train", transform=None):
         """
-        Initializes the dataloader for a given image directory and meta-data df path.
+        Initializes an Oxford Pets dataset.
 
-        :param img_dir: A file path to the directory containing the images to be loaded.
-        :param meta_path: A file path specifying the location of the meta_data.csv file.
-        :param transform: A set of transform compositions from albumentations to apply to each
-            (image, labels) pair that is loaded.
-        :param: The dataset split to use in this dataset.
+        :param dataset_dir: A directory containing an images/ folder and meta_data.csv file.
+        :param split: The dataset split to use in this dataset i.e. "train" or "val".
+        :param transform: A set of transforms to apply to each image before it is batched.
         """
-        self.img_dir = img_dir  # Images will be loaded from this directory for each batch
-        self.meta_df = pd.read_csv(meta_path)  # Load in the full df from disk
-        self.meta_df = self.meta_df.loc[self.meta_df["split"] == split, :]  # Subset for the split
+        self.img_dir = os.path.join(dataset_dir, "images")
+        self.meta_df = pd.read_csv(os.path.join(dataset_dir, "meta_data.csv"))
+        self.meta_df = self.meta_df.loc[self.meta_df["split"] == split, :]  # Subset for the specified split
         self.transform = transform
         self.image_names = self.meta_df["image_name"].tolist()
         # Create a dictionary of class_id value [0, 36] for every image name for quick retrival
@@ -86,8 +128,8 @@ class OxfordPetsDataset(Dataset):
 
         :param idx: An internal image index number from [0, len(self.img_ids) - 1].
         :returns: A dict with the following format:
-            image: An image of size (C, H, W) as a torch.Tensor
-            class_id: The class_id associated with the image, a unique group identifier.
+            image: An image of size (C=3, H=32, W=32) as a torch.Tensor
+            class_id: The class_id associated with the image, a unique group identifier
         """
         # Load in the image and labels from disk
         image_name = self.image_names[idx]
@@ -100,6 +142,8 @@ class OxfordPetsDataset(Dataset):
         class_id = torch.tensor(self.class_id[image_name], dtype=torch.long)
         return {"image": image, "class_id": class_id}
 
+
+## TODO: Add celebA here as well
 
 train_transform = transforms.Compose([
     transforms.RandomHorizontalFlip(p=0.5),  # Add random horizontal flip data augmentations
@@ -121,19 +165,16 @@ val_transform = transforms.Compose([
 ])
 
 
-def get_dataloader(dataset_dir: str, split: str, batch_size: int) -> DataLoader:
+def get_dataloader(datasets_dir: str, dataset: str, split: str, batch_size: int) -> DataLoader:
     """
-    Returns a Dataloader for the split specified i.e. train or val.
+    Returns a Dataloader for the split specified i.e. "train" or "val".
 
-    :param dataset_dir: The location of the dataset on disk, which should be a directory
-        containing an images folder and a meta_data.csv file.
+    :param datasets_dir: The directory where the datasets are stored, typically called "datasets".
+    :param dataset: The name of the dataset i.e. "oxford_pets", "cifar10" etc.
     :param split: The dataset split to construct a dataloader for i.e. train or val.
     :param batch_size: The number of images in each batch.
     :return: A dataloader for the given split specified in the input args.
     """
-    img_dir = os.path.join(dataset_dir, "images")
-    meta_path = os.path.join(dataset_dir, "meta_data.csv")
-
     device = get_device()  # Auto-detect what hardware is available
     if device == "cuda":  # Change kwargs depending on the device in use
         num_workers, pin_memory, persistent_workers, prefetch_factor = 8, True, True, 4
@@ -149,15 +190,20 @@ def get_dataloader(dataset_dir: str, split: str, batch_size: int) -> DataLoader:
     else:
         raise KeyError(f"split={split} not recognized")
 
-    dataset = OxfordPetsDataset(img_dir, meta_path, transform, split)
+    if dataset == "cifar10":
+        dataset = CIFAR10Dataset(datasets_dir, split, transform)
+    elif dataset == "oxford_pets":
+        dataset = OxfordPetsDataset(os.path.join(datasets_dir, "oxford_pets"), split, transform)
+    ## TODO: Add celebA here as well
+
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers,
                       pin_memory=pin_memory, persistent_workers=persistent_workers,
                       prefetch_factor=prefetch_factor)
 
 
 if __name__ == "__main__":
-    # Pre-process all the images on disk to be [128, 128, 3]
-    print("Pre-processing images to be [128, 128, 3]")
+    # Pre-process all the images on disk for the Oxford Pets dataset to be [128, 128, 3]
+    print("Pre-processing oxford pet dataset images to be [128, 128, 3]")
     input_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "original", "images")
-    output_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "processed", "images")
+    output_dir = os.path.join(CURRENT_DIR, "dataset", "oxford_pets", "images")
     resize_and_crop(input_dir, output_dir, 128)

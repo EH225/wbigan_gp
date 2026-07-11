@@ -97,7 +97,7 @@ class Generator(nn.Module):
     Conditional image generator model for a Wasserstein Bi-GAN.
 
     Starting with an input latent noise vector z of size (B, z_dim), this model returns a collection
-    of up-sampled RGB images of size (B, 3, D, 1D28) of pixel values [-1, +1].
+    of up-sampled RGB images of size (B, 3, image_dim, image_dim) of pixel values [-1, +1].
 
     Generator(z, class_embed) -> fake_images
     """
@@ -109,12 +109,12 @@ class Generator(nn.Module):
         :param z_dim: The dimension of the input latent noise vector, z. This is also the dimension of the
             embedding vectors used to represent each class. The default is 128.
         :param image_dim: The dimension of the input images used during training and also the output images
-            produced by the Bi-GAN model.
+            produced by the Bi-GAN model. Must be one of: [128, 64, 32].
         """
         super().__init__()
         self.name = "generator"
         self.z_dim = z_dim
-        assert image_dim in [128, 64], "image_dim must be one of: [128, 64]"
+        assert image_dim in [128, 64, 32], "image_dim must be one of: [128, 64, 32]"
         self.image_dim = image_dim
 
         # This fully connected layer maps from the latent noise vector to a larger tensor that
@@ -167,7 +167,8 @@ class Generator(nn.Module):
         cond_vec = torch.cat([z, class_embed], dim=1)  # (B, 2*z_dim)
 
         x = self.fc(z)  # (B, z_dim) -> (B, 512 * 8 * 8) = (B, 32768)
-        x = x.view(-1, 512, 8, 8)  # Reshape into a 2d image (B, 512 * 8 * 8) -> (B, 512, 8, 8)
+        # Reshape into a 2d image (B, 512 * 8 * 8) -> (B, 512, 8, 8)
+        x = x.view(-1, 512, (self.image_dim // 16), (self.image_dim // 16))
         x = self.input_conv(x)  # Apply the initial conv layer
 
         # Pass through the residual block backbone with self-attention

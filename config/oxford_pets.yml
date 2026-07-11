@@ -1,5 +1,6 @@
 # This config file the config for training a Wasserstein Bi-GAN on the Oxford Pets dataset
-name: wbigan
+name: oxford_pets_wbigan
+dataset: oxford_pets
 
 models: # Define model parameters
   z_dim: 64 # Latent vector dimension
@@ -16,18 +17,18 @@ pretraining: # Specify parameters used for pretraining
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 1000
-  save_every: 1000
+  save_every: 5000
 
 training: # Specify parameters used for training
   batch_size: 64
   lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
-  num_steps: 10000
+  num_steps: 20000
   adam_betas: [0.0, 0.9]
-  grad_clip: 2.0
+  grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
-  eval_every: 200
+  eval_every: 1000
   save_every: 2000
-  critic_updates: 2 # The number of updates to the discriminator for every update to G and E
-  lambda_val: 20.0 # Controls the gradient penalty to proxy 1-Lipschitz condition
+  critic_updates: 3 # The number of updates to the discriminator for every update to G and E
+  lambda_val: 10.0 # Controls the gradient penalty to proxy 1-Lipschitz condition

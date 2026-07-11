@@ -13,7 +13,7 @@ from dataset_utils import get_dataloader
 from trainer import Trainer
 
 
-def run_pretraining(config_name: str, dataset_dir: str) -> None:
+def run_pretraining(config_name: str, datasets_dir: str) -> None:
     """
     This helper function runs pre-training of the model for a given config file specified by
     config_name. This function:
@@ -23,18 +23,20 @@ def run_pretraining(config_name: str, dataset_dir: str) -> None:
         4. Run the training loop by calling trainer.pretrain()
 
     :param config_name: The name of the config file to use for running training.
-    :param dataset_dir: The directory location of the dataset.
+    :param datasets_dir: The directory where the datasets are stored, typically called "datasets".
     :return: None.
     """
     config = read_yaml(os.path.join(CURRENT_DIR, "config", f"{config_name}.yml"))
     dataloaders = {
-        "train": get_dataloader(dataset_dir, "train", config["pretraining"].get("batch_size", 64)),
-        "val": get_dataloader(dataset_dir, "val", config["pretraining"].get("batch_size", 64))}
+        "train": get_dataloader(datasets_dir, config["dataset"], "train",
+                                config["pretraining"].get("batch_size", 64)),
+        "val": get_dataloader(datasets_dir, config["dataset"], "val",
+                              config["pretraining"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
     trainer.pretrain()
 
 
-def run_training(config_name: str, dataset_dir: str) -> None:
+def run_training(config_name: str, datasets_dir: str) -> None:
     """
     This helper function runs training of the model for a given config file specified by
     config_name. This function:
@@ -44,13 +46,15 @@ def run_training(config_name: str, dataset_dir: str) -> None:
         4. Run the training loop by calling trainer.train()
 
     :param config_name: The name of the config file to use for running training.
-    :param dataset_dir: The directory location of the dataset.
+    :param datasets_dir: The directory where the datasets are stored, typically called "datasets".
     :return: None.
     """
     config = read_yaml(os.path.join(CURRENT_DIR, "config", f"{config_name}.yml"))
     dataloaders = {
-        "train": get_dataloader(dataset_dir, "train", config["training"].get("batch_size", 64)),
-        "val": get_dataloader(dataset_dir, "val", config["training"].get("batch_size", 64))}
+        "train": get_dataloader(datasets_dir, config["dataset"], "train",
+                                config["training"].get("batch_size", 64)),
+        "val": get_dataloader(datasets_dir, config["dataset"], "val",
+                              config["training"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
     trainer.train()
 
@@ -60,5 +64,6 @@ if __name__ == "__main__":
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--config", help="The name of the config file to be used for training.")
     args = parser.parse_args()
-    dataset_dir = os.path.join(CURRENT_DIR, "dataset", "processed")
-    run_training(args.config, dataset_dir)  # Run the trailing loop of the WBi-GAN
+    datasets_dir = os.path.join(CURRENT_DIR, "datasets")
+    run_pretraining(args.config, datasets_dir)  # Run the pre-training loop for the WBIGAN
+    run_training(args.config, datasets_dir)  # Run the training loop for the WBIGAN

@@ -40,12 +40,12 @@ class Discriminator(nn.Module):
         :param z_dim: The dimension of the output latent noise vector, z. This is also the dimension of the
             embedding vectors used to represent each class. The default is 128.
         :param image_dim: The dimension of the input images used during training and also the output images
-            produced by the Bi-GAN model.
+            produced by the Bi-GAN model. Must be one of: [128, 64, 32].
         """
         super().__init__()
         self.name = "discriminator"
         self.z_dim = z_dim
-        assert image_dim in [128, 64], "image_dim must be one of: [128, 64]"
+        assert image_dim in [128, 64, 32], "image_dim must be one of: [128, 64, 32]"
         self.image_dim = image_dim
 
         # An initial convolution before the residual down-sampling conv blocks
