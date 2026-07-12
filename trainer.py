@@ -330,6 +330,15 @@ class Trainer:
                     if torch.is_tensor(v):
                         state[k] = v.to(self.device)
 
+    def update_lr(self, new_lr: float) -> None:
+        """
+        Sets all optimizers to have a new learning rate specified by new_lr.
+        """
+        for model in self.models:
+            for param_group in getattr(self, f"opt_{model.name}").param_groups:
+                param_group["lr"] = new_lr
+        self.logger.info(f"Learning rates updated to: {new_lr}")
+
     def report_memory_usage(self) -> None:
         """
         Reports the current memory usage on the CPU and GPU if available via logging.
@@ -526,7 +535,7 @@ class Trainer:
             opt.step()  # Update the model parameters by taking a gradient step
         return float(grad_norm)
 
-    def pretrain(self) -> None:
+    def pretrain(self, new_lr: float = None) -> None:
         """
         Runs pre-training on the Generator, Encoder, and ClassEmbeddings models using an auto-encoder
         reconstruction loss approach to pre-train these models to a baseline level of performance before
@@ -539,12 +548,21 @@ class Trainer:
 
         This will help the generator learn to create realistic looking images and the encoder to learn to
         create z vectors near the expected N(0, I) prior latent distribution.
+
+        Pass in new_lr to update the learning rate to new_lr after loading the last checkpoint (if applicable)
+        and training continues.
+
+        Pass in new_lr to update the learning rate to new_lr after loading the last checkpoint (if applicable)
+        and training continues.
         """
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):
             self.load_latest_checkpoint(pretrain=True)
+
+        if new_lr is not None:  # If provided, update the learning rates of all models before training
+            self.update_lr(new_lr)
 
         self.logger.info(f"Starting Pre-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
@@ -646,7 +664,7 @@ class Trainer:
                 del latent_cycle_loss, loss, G_grad, E_grad, CE_grad
                 pbar.update(1)
 
-    def train(self) -> None:
+    def train(self, new_lr: float = None) -> None:
         """
         Runs the training loop for the Wasserstein Bi-GAN until completion for self.num_steps total
         training iterations.
@@ -656,6 +674,9 @@ class Trainer:
         self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):
             self.load_latest_checkpoint(pretrain=False)
+
+        if new_lr is not None:  # If provided, update the learning rates of all models before training
+            self.update_lr(new_lr)
 
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models

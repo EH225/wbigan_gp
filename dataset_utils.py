@@ -143,7 +143,53 @@ class OxfordPetsDataset(Dataset):
         return {"image": image, "class_id": class_id}
 
 
-## TODO: Add celebA here as well
+class CelebADataset(Dataset):
+    """
+    Dataset for celebA which returns [64 x 64 x 3] images and has 10 classes labeled [0-9].
+    """
+
+    def __init__(self, dataset_dir: str, split: str = "train", transform=None):
+        """
+        Initializes the celebA dataset.
+
+        :param dataset_dir: A directory containing an images/ folder and meta_data.csv file.
+        :param split: The dataset split to use in this dataset i.e. "train" or "val".
+        :param transform: A set of transforms to apply to each image before it is batched.
+        """
+        self.img_dir = os.path.join(dataset_dir, "images")
+        self.meta_df = pd.read_csv(os.path.join(dataset_dir, "meta_data.csv"))
+        self.meta_df = self.meta_df.loc[self.meta_df["split"] == split, :]  # Subset for the specified split
+        self.transform = transform
+        self.image_names = self.meta_df["image_name"].tolist()
+        # Create a dictionary of class_id value [0, 9] for every image name for quick retrival
+        self.class_id = {row["image_name"]: row["class_id"] - 1 for _, row in self.meta_df.iterrows()}
+
+    def __len__(self):
+        """
+        Returns the total number of images in the dataset.
+        """
+        return len(self.image_names)
+
+    def __getitem__(self, idx: int) -> Dict:
+        """
+        Returns a dictionary containing keys "image" and "class_id" for a particular index in the dataset.
+
+        :param idx: An internal image index number from [0, len(self.img_ids) - 1].
+        :returns: A dict with the following format:
+            image: An image of size (C=3, H=32, W=32) as a torch.Tensor
+            class_id: The class_id associated with the image, a unique group identifier
+        """
+        # Load in the image and labels from disk
+        image_name = self.image_names[idx]
+        img_path = os.path.join(self.img_dir, image_name)
+        image = Image.open(img_path).convert("RGB")
+
+        if self.transform is not None:  # Apply transforms if specified
+            image = self.transform(image)
+
+        class_id = torch.tensor(self.class_id[image_name], dtype=torch.long)
+        return {"image": image, "class_id": class_id}
+
 
 train_transform = transforms.Compose([
     transforms.RandomHorizontalFlip(p=0.5),  # Add random horizontal flip data augmentations
@@ -194,7 +240,8 @@ def get_dataloader(datasets_dir: str, dataset: str, split: str, batch_size: int)
         dataset = CIFAR10Dataset(datasets_dir, split, transform)
     elif dataset == "oxford_pets":
         dataset = OxfordPetsDataset(os.path.join(datasets_dir, "oxford_pets"), split, transform)
-    ## TODO: Add celebA here as well
+    elif dataset == "celebA":
+        dataset = CelebADataset(os.path.join(datasets_dir, "celebA"), split, transform)
 
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers,
                       pin_memory=pin_memory, persistent_workers=persistent_workers,
@@ -258,9 +305,20 @@ def get_class_labels(dataset: str) -> dict:
             36: 'wheaten_terrier',
             37: 'yorkshire_terrier'}
     elif dataset == "celebA":
-        return {}
+        return {
+            0: "male_black_hair",
+            1: "male_blond_hair",
+            2: "male_brown_hair",
+            3: "male_gray_hair",
+            4: "male_other",
+            5: "female_black_hair",
+            6: "female_blond_hair",
+            7: "female_brown_hair",
+            8: "female_gray_hair",
+            9: "female_other",
+        }
 
-2
+
 if __name__ == "__main__":
     # Pre-process all the images on disk for the Oxford Pets dataset to be [128, 128, 3]
     print("Pre-processing Oxford Pet dataset images to be [128, 128, 3]")

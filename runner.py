@@ -13,7 +13,7 @@ from dataset_utils import get_dataloader
 from trainer import Trainer
 
 
-def run_pretraining(config_name: str, datasets_dir: str) -> None:
+def run_pretraining(config_name: str, datasets_dir: str, **kwargs) -> None:
     """
     This helper function runs pre-training of the model for a given config file specified by
     config_name. This function:
@@ -33,10 +33,10 @@ def run_pretraining(config_name: str, datasets_dir: str) -> None:
         "val": get_dataloader(datasets_dir, config["dataset"], "val",
                               config["pretraining"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
-    trainer.pretrain()
+    trainer.pretrain(**kwargs)
 
 
-def run_training(config_name: str, datasets_dir: str) -> None:
+def run_training(config_name: str, datasets_dir: str, **kwargs) -> None:
     """
     This helper function runs training of the model for a given config file specified by
     config_name. This function:
@@ -56,7 +56,7 @@ def run_training(config_name: str, datasets_dir: str) -> None:
         "val": get_dataloader(datasets_dir, config["dataset"], "val",
                               config["training"].get("batch_size", 64))}
     trainer = Trainer(config=config, dataloaders=dataloaders)
-    trainer.train()
+    trainer.train(**kwargs)
 
 
 if __name__ == "__main__":
