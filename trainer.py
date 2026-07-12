@@ -551,9 +551,6 @@ class Trainer:
 
         Pass in new_lr to update the learning rate to new_lr after loading the last checkpoint (if applicable)
         and training continues.
-
-        Pass in new_lr to update the learning rate to new_lr after loading the last checkpoint (if applicable)
-        and training continues.
         """
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
@@ -664,10 +661,13 @@ class Trainer:
                 del latent_cycle_loss, loss, G_grad, E_grad, CE_grad
                 pbar.update(1)
 
-    def train(self, new_lr: float = None) -> None:
+    def train(self, new_lr: float = None, freeze_encoder: bool = False) -> None:
         """
         Runs the training loop for the Wasserstein Bi-GAN until completion for self.num_steps total
         training iterations.
+
+        Pass in new_lr to update the learning rate to new_lr after loading the last checkpoint (if applicable)
+        and training continues.
         """
         config_dict = self.config["training"]  # Use the Bi-GAN training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
@@ -677,6 +677,11 @@ class Trainer:
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
+
+        if freeze_encoder is True:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+            self.encoder.eval()
 
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
@@ -713,12 +718,16 @@ class Trainer:
                     self.scaler.update()
 
                 # Encoder update
-                E_loss = self.compute_E_loss(batch)  # Compute the E loss over this batch with grads
-                self.compute_gradients(E_loss)  # Call backwards() on the loss to compute gradients
-                E_grad = self.optimizer_step(self.encoder)  # Update model params of E
-                self.optimizer_step(self.class_embedding)  # Update the class embedding model params
-                if self.scaler is not None:  # Only call update() iff using this approach
-                    self.scaler.update()
+                if freeze_encoder is False:
+                    E_loss = self.compute_E_loss(batch)  # Compute the E loss over this batch with grads
+                    self.compute_gradients(E_loss)  # Call backwards() on the loss to compute gradients
+                    E_grad = self.optimizer_step(self.encoder)  # Update model params of E
+                    self.optimizer_step(self.class_embedding)  # Update the class embedding model params
+                    if self.scaler is not None:  # Only call update() iff using this approach
+                        self.scaler.update()
+                else:  # If we have frozen the encoder, then no gradient updates will be made to it
+                    E_loss = torch.tensor(0.0, device=self.device)
+                    E_grad = np.nan
 
                 pbar.set_postfix(
                     G_loss=f"{G_loss.item():.1f}", G_grad=f"{G_grad:.1f}",
