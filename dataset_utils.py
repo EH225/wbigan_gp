@@ -162,7 +162,7 @@ class CelebADataset(Dataset):
         self.transform = transform
         self.image_names = self.meta_df["image_name"].tolist()
         # Create a dictionary of class_id value [0, 9] for every image name for quick retrival
-        self.class_id = {row["image_name"]: row["class_id"] - 1 for _, row in self.meta_df.iterrows()}
+        self.class_id = {row["image_name"]: int(row["class_id"]) for _, row in self.meta_df.iterrows()}
 
     def __len__(self):
         """
@@ -176,7 +176,7 @@ class CelebADataset(Dataset):
 
         :param idx: An internal image index number from [0, len(self.img_ids) - 1].
         :returns: A dict with the following format:
-            image: An image of size (C=3, H=32, W=32) as a torch.Tensor
+            image: An image of size (C=3, H=64, W=64) as a torch.Tensor
             class_id: The class_id associated with the image, a unique group identifier
         """
         # Load in the image and labels from disk
