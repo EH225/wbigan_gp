@@ -640,7 +640,7 @@ class Trainer:
                         # Also save samples of reconstructed images i.e. G(E(x_real))
                         file_name = f"reconstructions-{self.step}.png"
                         titles = class_id[:40].detach().cpu().tolist()
-                        titles = [f"{i} {self.class_labels[i]}" for i in range(titles)]
+                        titles = [f"{i} {self.class_labels[i]}" for i in titles]
                         save_images(x_hat[:40].detach().cpu(), titles, 5,
                                     os.path.join(self.pretrain_samples_folder, file_name))
                         # Print some diagnostic stats on how the encoder outputs look

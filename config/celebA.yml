@@ -16,7 +16,7 @@ pretraining: # Specify parameters used for pretraining
   grad_clip: 1.0
   use_amp: True
   use_latest_checkpoint: True
-  eval_every: 1000
+  eval_every: 10
   save_every: 5000
 
 training: # Specify parameters used for training
