@@ -145,7 +145,7 @@ class OxfordPetsDataset(Dataset):
 
 class CelebADataset(Dataset):
     """
-    Dataset for celebA which returns [64 x 64 x 3] images and has 10 classes labeled [0-9].
+    Dataset for celebA which returns [64 x 64 x 3] images and has 7 classes labeled [0-6].
     """
 
     def __init__(self, dataset_dir: str, split: str = "train", transform=None):
@@ -307,15 +307,12 @@ def get_class_labels(dataset: str) -> dict:
     elif dataset == "celebA":
         return {
             0: "male_black_hair",
-            1: "male_blond_hair",
-            2: "male_brown_hair",
-            3: "male_gray_hair",
-            4: "male_other",
-            5: "female_black_hair",
-            6: "female_blond_hair",
-            7: "female_brown_hair",
-            8: "female_gray_hair",
-            9: "female_other",
+            1: "male_brown_hair",
+            2: "male_other",
+            3: "female_black_hair",
+            4: "female_brown_hair",
+            5: "female_blond_hair",
+            6: "female_other",
         }
 
 
