@@ -679,6 +679,7 @@ class Trainer:
             self.update_lr(new_lr)
 
         if freeze_encoder is True:
+            self.logger.info("Freezing encoder model")
             for param in self.encoder.parameters():
                 param.requires_grad = False
             self.encoder.eval()
