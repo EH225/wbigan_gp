@@ -1,17 +1,17 @@
-# This config file the config for training a Wasserstein Bi-GAN on the CIFAR-10 dataset
-name: cifar10_wigan
-dataset: cifar10
+# This config file the config for training a Wasserstein Bi-GAN on the CelebA dataset
+name: celebA_wigan
+dataset: celebA
 
 models: # Define model parameters
-  z_dim: 32 # Latent vector dimension
+  z_dim: 64 # Latent vector dimension
   num_classes: 10 # The number of conditional class IDs
-  image_dim: 32
+  image_dim: 64
 
 pretraining: # Specify parameters used for pretraining
   batch_size: 256
   lr: 1.0e-4
   weight_decay: 1.0e-5
-  num_steps: 20000
+  num_steps: 25000
   adam_betas: [0.9, 0.999]
   grad_clip: 1.0
   use_amp: True
