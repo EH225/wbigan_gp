@@ -5,7 +5,7 @@ dataset: celebA
 models: # Define model parameters
   z_dim: 128 # Latent vector dimension
   image_dim: 64 # The size of the images going in and out of the models i.e. [image_dim, image_dim, 3]
-  num_classes: 7 # The number of conditional class IDs
+  num_classes: 2 # The number of conditional class IDs
 
 pretraining: # Specify parameters used for pretraining
   batch_size: 128
@@ -25,7 +25,7 @@ training: # Specify parameters used for training
   weight_decay: 0.0e-0
   num_steps: 50000
   adam_betas: [0.0, 0.9]
-  grad_clip: 5.0
+  grad_clip: None
   use_amp: True
   use_latest_checkpoint: True
   eval_every: 500
