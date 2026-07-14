@@ -761,11 +761,11 @@ class Trainer:
 
         if self.num_classes > 0:
             if self.num_classes > 5:
-                class_id = torch.tensor(list(range(self.num_classes)), device=self.device)  # (B, )
-                titles = [f"{i} {self.class_labels[i]}" for i in range(self.num_classes)]
+                class_id = list(range(self.num_classes))
             else:  # For self.num_classes <= 5, generate 5 samples from each class in a grid
-                class_id = torch.tensor(list(range(self.num_classes)) * 5, device=self.device)  # (B, )
-                titles = [f"{i} {self.class_labels[i]}" for i in list(range(self.num_classes)) * 5]
+                class_id = [i for i in range(self.num_classes) for _ in range(5)]
+            titles = [f"{i} {self.class_labels[i]}" for i in class_id]
+            class_id = torch.tensor(class_id, device=self.device)  # (B, )
 
         else:  # If no classes are provided, then do not create any image titles
             class_id = torch.zeros(25, device=self.device)  # (B, )
