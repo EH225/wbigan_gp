@@ -18,7 +18,7 @@ class ResDownBlock(nn.Module):
     Down-sampling convolution block with residual connections.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, groups: int = 32):
+    def __init__(self, in_channels: int, out_channels: int, groups: int = 16):
         """
         Down-sampling convolution block with residual connections.
 
@@ -78,10 +78,10 @@ class Encoder(nn.Module):
 
     This model approximates an inverse mapping of the generator.
 
-    Encoder(real_image, class_embed) -> z_hat
+    Encoder(real_image, class_id) -> z_hat
     """
 
-    def __init__(self, z_dim: int = 128, image_dim: int = 128):
+    def __init__(self, z_dim: int = 128, image_dim: int = 64, num_classes: int = 0):
         """
         Conditional image encoder model for a Wasserstein Bi-GAN.
 
@@ -89,47 +89,61 @@ class Encoder(nn.Module):
             embedding vectors used to represent each class. The default is 128.
         :param image_dim: The dimension of the input images used during training and also the output images
             produced by the Bi-GAN model. Must be one of: [128, 64, 32].
+        :param num_classes: The number of classes expected i.e. how many unique conditional inputs. Pass in
+            zero for no conditional classes.
         """
         super().__init__()
         self.name = "encoder"
         self.z_dim = z_dim
         assert image_dim in [128, 64, 32], "image_dim must be one of: [128, 64, 32]"
         self.image_dim = image_dim
+        self.num_classes = num_classes
+        assert isinstance(num_classes, int) and num_classes >= 0, "num_classes must be an int >= 0"
+
+        if num_classes > 0:  # Create a class embedding layer if needed
+            self.class_embedding = nn.Embedding(num_embeddings=num_classes, embedding_dim=z_dim)
 
         # An initial convolution before the residual down-sampling conv blocks
-        # All examples throughout this module will be using the image_dim=128 default
-        self.input_conv = nn.Conv2d(3, 64, 3, padding=1)  # Out: (B, 64, 128, 128)
+        # All examples throughout this module will be using the image_dim=64 default
+        self.input_conv = nn.Conv2d(3, 64, 3, padding=1)  # Out: (B, 64, 64, 64)
 
         # Define the encoder backbone as a series of down-sampling residual conv blocks
         self.blocks = nn.Sequential(
-            ResDownBlock(64, 128),  # (B, 64, 128, 128) -> (B, 128, 64, 64)
-            ResDownBlock(128, 256),  # (B, 128, 64, 64) -> (B, 256, 32, 32)
-            SelfAttention(256),  # (B, 256, 32, 32) -> (B, 256, 32, 32)
-            ResDownBlock(256, 512),  # (B, 256, 32, 32) -> (B, 512, 16, 16)
-            ResDownBlock(512, 512),  # (B, 512, 16, 16) -> (B, 512, 8, 8)
+            ResDownBlock(64, 128),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
+            ResDownBlock(128, 256),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
+            SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
+            ResDownBlock(256, 512),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
             ResDownBlock(512, 512),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
         )
 
         # This fully connected layer takes the deep latent feature representation of the input
         # image concatenated with the class_embed vector and outputs a predicted latent z-vector
         self.norm = nn.LayerNorm(512)
-        self.fc = nn.Linear(512 + z_dim, z_dim)  # (B, 512 + z_dim) -> (B, z_dim)
+        # (B, 512 + z_dim) -> (B, z_dim) if classes are provided, else (B, 512) -> (B, z_dim)
+        self.fc = nn.Linear(512 + (z_dim if self.num_classes > 0 else 0), z_dim)
 
-    def forward(self, x: torch.Tensor, class_embed: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, class_id: torch.Tensor = None) -> torch.Tensor:
         """
-        Forward pass through the encoder model. Encoder(real_image, class_embed) -> z_hat
+        Forward pass through the encoder model. Encoder(real_image, class_id) -> z_hat
 
         :param x: An input image tensor of size (B, 3, image_dim, image_dim) with pixel values [-1, +1].
-        :param class_embed: An input tensor of class label embeddings of size (B, z_dim).
+        :param class_id: An input tensor of class ID integers of size (B,).
         :returns: A tensor of size (B, z_dim) estimated latent z-vectors.
         """
-        assert class_embed.shape[-1] == self.z_dim, "class_embed have a size of (B, z_dim)"
+        msg = f"x must be (B, 3, {self.image_dim}, {self.image_dim})"
+        assert x.shape == (len(x), 3, self.image_dim, self.image_dim), msg
+        if self.num_classes > 0:
+            assert class_id is not None, "class_id must not be None if num_classes > 0"
+            assert len(x) == len(class_id), "Inputs x and class_id must the same length"
+
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 128, 128) -> (B, 64, 128, 128)
         x = self.blocks(x)  # Pass through the residual CNN encoder blocks (B, 512, 4, 4)
         x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
         x = torch.flatten(x, 1)  # Flatten (B, 512, 1, 1) -> (B, 512)
         x = F.silu(self.norm(x))  # Norm and pass through a non-linearity before the last FCNN layer
-        # Add in the class conditional information by concatenating class_embed
-        x = torch.cat([x, class_embed], dim=1)  # (B, 512) + (B, z_dim) = (B, 512 + z_dim)
+        # Add in the class conditional information by concatenating class_embed if applicable
+        if self.num_classes > 0:
+            class_embed = self.class_embedding(class_id)
+            x = torch.cat([x, class_embed], dim=1)  # (B, 512) + (B, z_dim) = (B, 512 + z_dim)
         z_hat = self.fc(x)  # Compute a predicted latent representation (B, z_dim)
         return z_hat

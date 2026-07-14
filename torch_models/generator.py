@@ -18,7 +18,7 @@ class ResUpBlock(nn.Module):
     Up-sampling convolution block with residual connections.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, groups: int = 32, cond_dim: int = 256):
+    def __init__(self, in_channels: int, out_channels: int, groups: int = 16, cond_dim: int = 256):
         """
         Up-sampling convolution block with residual connections.
 
@@ -99,10 +99,10 @@ class Generator(nn.Module):
     Starting with an input latent noise vector z of size (B, z_dim), this model returns a collection
     of up-sampled RGB images of size (B, 3, image_dim, image_dim) of pixel values [-1, +1].
 
-    Generator(z, class_embed) -> fake_images
+    Generator(z, class_id) -> fake_images
     """
 
-    def __init__(self, z_dim: int = 128, image_dim: int = 128):
+    def __init__(self, z_dim: int = 128, image_dim: int = 64, num_classes: int = 0):
         """
         Conditional image generator model for a Wasserstein Bi-GAN.
 
@@ -110,42 +110,48 @@ class Generator(nn.Module):
             embedding vectors used to represent each class. The default is 128.
         :param image_dim: The dimension of the input images used during training and also the output images
             produced by the Bi-GAN model. Must be one of: [128, 64, 32].
+        :param num_classes: The number of classes expected i.e. how many unique conditional inputs. Pass in
+            zero for no conditional classes.
         """
         super().__init__()
         self.name = "generator"
         self.z_dim = z_dim
         assert image_dim in [128, 64, 32], "image_dim must be one of: [128, 64, 32]"
         self.image_dim = image_dim
+        self.num_classes = num_classes
+        assert isinstance(num_classes, int) and num_classes >= 0, "num_classes must be an int >= 0"
+
+        if num_classes > 0:  # Create a class embedding layer if needed
+            self.class_embedding = nn.Embedding(num_embeddings=num_classes, embedding_dim=z_dim)
 
         # This fully connected layer maps from the latent noise vector to a larger tensor that
         # gets reshaped for convolution operations (z_dim, ) -> e.g. 512 * 8 * 8) -> (512, 8, 8)
         # for image_dim = 128, otherwise (512, 4, 4) for image_dim = 64 and (512, 2, 2) for image_dim = 32
-        # All examples throughout this module will be using the image_dim=128 default
+        # All examples throughout this module will be using the image_dim=64 default
         self.fc = nn.Linear(z_dim, 512 * (self.image_dim // 16) ** 2)
 
         # An initial convolution immediately after the linear layer but before the residual
         # blocks to help the network organize the initial learned feature map before upsampling
         self.input_conv = nn.Sequential(
-            nn.GroupNorm(32, 512),  # (B, 512, 8, 8) -> (B, 512, 8, 8)
+            nn.GroupNorm(32, 512),  # (B, 512, 4, 4) -> (B, 512, 4, 4)
             nn.SiLU(),
-            nn.Conv2d(512, 512, 3, padding=1),  # Out: (B, 512, 8, 8)
+            nn.Conv2d(512, 512, 3, padding=1),  # Out: (B, 512, 4, 4)
         )
 
-        # The dimension of the conditional context vector will always be 2x z_dim since it is
-        # the concatenation of the z-vector and the class conditional embedding which is also
-        # of size z_dim, it will be (B, 2*z_dim)
-        cond_dim = z_dim * 2
+        # The dimension of the conditional context vector will always be 2x z_dim if num_classes > 0 since
+        # the class embedding vector will be the same length and concatenated with the z-vector
+        cond_dim = z_dim * (2 if self.num_classes > 0 else 1)
 
         # Define the generator backbone as a series of up-sampling residual conv blocks
         self.blocks = nn.ModuleList([
-            ResUpBlock(512, 512, cond_dim=cond_dim),  # (B, 512, 8, 8) -> (B, 512, 16, 16)
-            ResUpBlock(512, 256, cond_dim=cond_dim),  # (B, 512, 16, 16) -> (B, 256, 32, 32)
-            SelfAttention(256),  # (B, 256, 32, 32) -> (B, 256, 32, 32)
-            ResUpBlock(256, 128, cond_dim=cond_dim),  # (B, 256, 32, 32) -> (B, 128, 64, 64)
-            ResUpBlock(128, 64, cond_dim=cond_dim),  # (B, 128, 64, 64) -> (B, 64, 128, 128)
+            ResUpBlock(512, 512, cond_dim=cond_dim),  # (B, 512, 4, 4) -> (B, 512, 8, 8)
+            ResUpBlock(512, 256, cond_dim=cond_dim),  # (B, 512, 8, 8) -> (B, 256, 16, 16)
+            SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
+            ResUpBlock(256, 128, cond_dim=cond_dim),  # (B, 256, 16, 16) -> (B, 128, 32, 32)
+            ResUpBlock(128, 64, cond_dim=cond_dim),  # (B, 128, 32, 32) -> (B, 64, 64, 64)
         ])
 
-        # Final conv mapping from (B, 64, 128, 128) to (B, 3, 128, 128) i.e. 3 channel RGB with
+        # Final conv mapping from (B, 64, 64, 64) to (B, 3, 64, 64) i.e. 3 channel RGB with
         # final pixel values [-1, +1]
         self.to_rgb = nn.Sequential(
             nn.GroupNorm(32, 64),  # Apply a final group norm
@@ -154,20 +160,28 @@ class Generator(nn.Module):
             nn.Tanh()  # Constrain to [-1, +1] pixel values
         )
 
-    def forward(self, z: torch.Tensor, class_embed: torch.Tensor) -> torch.Tensor:
+    def forward(self, z: torch.Tensor, class_id: torch.Tensor = None) -> torch.Tensor:
         """
         Forward pass through the generator model. Generator(z, class_embed) -> fake_images
 
         :param z: An input latent tensor of size (B, z_dim) to seed the generation process.
-        :param class_embed: An input tensor of class label embeddings of size (B, z_dim).
+        :param class_id: An input tensor of class ID integers of size (B,).
         :returns: A tensor of size (B, 3, image_dim, image_dim) generated images.
         """
-        assert z.shape == class_embed.shape, "z.shape must equal class_embed.shape"
-        # Concatenate the z-vector with the class embedding vector to create a conditioning vector
-        cond_vec = torch.cat([z, class_embed], dim=1)  # (B, 2*z_dim)
+        assert z.shape[-1] == self.z_dim, "z must be (B, z_dim)"
+        if self.num_classes > 0:
+            assert class_id is not None, "class_id must not be None if num_classes > 0"
+            assert len(z) == len(class_id), "Inputs z and class_id must the same length"
 
-        x = self.fc(z)  # (B, z_dim) -> (B, 512 * 8 * 8) = (B, 32768)
-        # Reshape into a 2d image (B, 512 * 8 * 8) -> (B, 512, 8, 8)
+        # Concatenate the z-vector with the class embedding vector to create a conditioning vector
+        if self.num_classes > 0:
+            class_embed = self.class_embedding(class_id)  # (B,) -> (B, z_dim)
+            cond_vec = torch.cat([z, class_embed], dim=1)  # (B, 2*z_dim)
+        else:  # Otherwise, no concatenation needed, cond_vec is just z (B, z_dim)
+            cond_vec = z
+
+        x = self.fc(z)  # (B, z_dim) -> (B, 512 * 4 * 4) = (B, 8192)
+        # Reshape into a 2d image (B, 512 * 4 * 4) -> (B, 512, 4, 4)
         x = x.view(-1, 512, (self.image_dim // 16), (self.image_dim // 16))
         x = self.input_conv(x)  # Apply the initial conv layer
 
