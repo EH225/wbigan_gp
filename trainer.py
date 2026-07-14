@@ -105,10 +105,12 @@ class Trainer:
         :param dataloaders: A dictionary of torch dataloaders with keys "train" and "val".
         """
         super().__init__()
+        logging.info("Initializing Trainer")
         self.config = config  # Record config parameters passed
         self.z_dim = config["models"]["z_dim"]
         self.image_dim = config["models"]["image_dim"]
         self.num_classes = config["models"]["num_classes"]
+        logging.info(f"z_dim: {self.z_dim}, image_dim: {self.image_dim}, num_classes: {self.num_classes}")
 
         ### Set up folders for the output (samples images), losses, and model checkpoints
         results_folder = os.path.join(CURRENT_DIR, "results", str(config["name"]))
