@@ -306,14 +306,18 @@ def get_class_labels(dataset: str) -> dict:
             37: 'yorkshire_terrier'}
     elif dataset == "celebA":
         return {
-            0: "male_black_hair",
-            1: "male_brown_hair",
-            2: "male_other",
-            3: "female_black_hair",
-            4: "female_brown_hair",
-            5: "female_blond_hair",
-            6: "female_other",
+            0: "male",
+            1: "female"
         }
+        # return {
+        #     0: "male_black_hair",
+        #     1: "male_brown_hair",
+        #     2: "male_other",
+        #     3: "female_black_hair",
+        #     4: "female_brown_hair",
+        #     5: "female_blond_hair",
+        #     6: "female_other",
+        # }
 
 
 if __name__ == "__main__":
