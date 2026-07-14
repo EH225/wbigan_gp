@@ -759,10 +759,15 @@ class Trainer:
         self.generator.eval()
 
         if self.num_classes > 0:
-            class_id = torch.tensor(list(range(self.num_classes)), device=self.device)  # (B, )
-            titles = [f"{i} {self.class_labels[i]}" for i in range(self.num_classes)]
+            if self.num_classes > 5:
+                class_id = torch.tensor(list(range(self.num_classes)), device=self.device)  # (B, )
+                titles = [f"{i} {self.class_labels[i]}" for i in range(self.num_classes)]
+            else:  # For self.num_classes <= 5, generate 5 samples from each class in a grid
+                class_id = torch.tensor(list(range(self.num_classes)) * 5, device=self.device)  # (B, )
+                titles = [f"{i} {self.class_labels[i]}" for i in list(range(self.num_classes)) * 5]
+
         else:  # If no classes are provided, then do not create any image titles
-            class_id = torch.zeros(10, device=self.device)  # (B, )
+            class_id = torch.zeros(25, device=self.device)  # (B, )
             titles = ["" for i in range(len(class_id))]
 
         rng = torch.Generator(device=self.device)  # Get up a random number generator
