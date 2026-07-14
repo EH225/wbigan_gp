@@ -192,7 +192,8 @@ class Trainer:
         """
         ### Configure optimizers for training each model, exclude bias and norm layers from weight decay
         self.amp_dtype = get_amp_dtype(self.device) if config_dict["use_amp"] else None
-        norm_layers = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm, nn.LayerNorm)
+        exclusions = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d,
+                      nn.GroupNorm, nn.LayerNorm, nn.Embedding)
         for model in self.models:  # Create a separate Adam optimizer for each model
             decay_params, no_decay_params = [], []
 
@@ -201,7 +202,7 @@ class Trainer:
                     if not param.requires_grad:  # Skip over if no gradient tracking
                         continue
 
-                    if isinstance(module, norm_layers):
+                    if isinstance(module, exclusions):
                         # Exclude any kind of batch / group / layer norm from weight decay
                         no_decay_params.append(param)
                     elif name == "bias":  # Also exclude any bias terms from weight decay as well
