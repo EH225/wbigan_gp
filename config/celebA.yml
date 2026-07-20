@@ -3,7 +3,7 @@ name: celebA_wigan
 dataset: celebA
 
 models: # Define model parameters
-  z_dim: 128 # Latent vector dimension
+  z_dim: 64 # Latent vector dimension
   image_dim: 64 # The size of the images going in and out of the models i.e. [image_dim, image_dim, 3]
   num_classes: 2 # The number of conditional class IDs
 
@@ -24,7 +24,7 @@ training: # Specify parameters used for training
   lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
   num_steps: 50000
-  adam_betas: [ 0.0, 0.9 ]
+  adam_betas: [ 0.5, 0.9 ]
   grad_clip: 100.0
   use_amp: True
   use_latest_checkpoint: True

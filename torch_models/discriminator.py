@@ -16,7 +16,7 @@ from torch_models.shared_components import SelfAttention
 
 class Discriminator(nn.Module):
     """
-    Conditional discriminator model for a Wasserstein Bi-GAN.
+    Conditional discriminator (critic) model for a Wasserstein Bi-GAN.
 
     This model operates on:
         - An input image tensor of size (B, 3, image_dim, image_dim)
@@ -35,12 +35,12 @@ class Discriminator(nn.Module):
     Discriminator(image, z) -> float
     """
 
-    def __init__(self, z_dim: int = 128, image_dim: int = 64, num_classes: int = 0):
+    def __init__(self, z_dim: int = 64, image_dim: int = 64, num_classes: int = 0):
         """
         A conditional discriminator (critic) model for a Wasserstein Bi-GAN.
 
         :param z_dim: The dimension of the output latent noise vector, z. This is also the dimension of the
-            embedding vectors used to represent each class. The default is 128.
+            embedding vectors used to represent each class. The default is 64.
         :param image_dim: The dimension of the input images used during training and also the output images
             produced by the Bi-GAN model. Must be one of: [128, 64, 32].
         :param num_classes: The number of classes expected i.e. how many unique conditional inputs. Pass in
@@ -52,9 +52,10 @@ class Discriminator(nn.Module):
         assert image_dim in [128, 64, 32], "image_dim must be one of: [128, 64, 32]"
         self.image_dim = image_dim
         self.num_classes = num_classes
-        assert isinstance(num_classes, int) and num_classes >= 0, "num_classes must be an int >= 0"
+        assert isinstance(num_classes, int) and num_classes >= 1, "num_classes must be an int >= 1"
+        cond_dim = self.z_dim if num_classes > 1 else 0
 
-        if num_classes > 0:  # Create a class embedding layer if needed
+        if num_classes > 1:  # Create a class embedding layer if needed
             self.class_embedding = nn.Embedding(num_embeddings=num_classes, embedding_dim=z_dim)
 
         # An initial convolution before the residual down-sampling conv blocks
@@ -63,12 +64,19 @@ class Discriminator(nn.Module):
 
         # Define the discriminator CNN encoder backbone as a series of down-sampling residual conv blocks
         self.blocks = nn.Sequential(
-            ResDownBlock(64, 128),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
-            ResDownBlock(128, 256),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
+            ResDownBlock(64, 128, cond_dim=0),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
+            ResDownBlock(128, 256, cond_dim=0),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
             SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
-            ResDownBlock(256, 512),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
-            ResDownBlock(512, 512),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
+            ResDownBlock(256, 512, cond_dim=0),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
+            ResDownBlock(512, 512, cond_dim=0),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
         )
+
+        # Add a final convolution to mix spatial information before compressing
+        self.final_conv = nn.Sequential(
+            nn.GroupNorm(16, 512),
+            nn.SiLU(),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+        )  # (B, 512, 4, 4) -> (B, 512, 4, 4)
 
         # Define a small MLP to process the input latent z vector
         self.mlp_z = nn.Sequential(
@@ -86,9 +94,7 @@ class Discriminator(nn.Module):
 
         # Define the final MLP that will operate on the fusion of all 3 inputs (x, z, class_embed)
         self.mlp = nn.Sequential(
-            nn.Linear(512 + (4 if self.num_classes > 0 else 2) * self.z_dim, 768),
-            nn.SiLU(),
-            nn.Linear(768, 512),
+            nn.Linear(512 + (4 if self.num_classes > 1 else 2) * self.z_dim, 512),
             nn.SiLU(),
             nn.Linear(512, 256),
             nn.SiLU(),
@@ -108,30 +114,28 @@ class Discriminator(nn.Module):
         assert x.shape == (len(x), 3, self.image_dim, self.image_dim), msg
         assert len(x) == len(z), "Inputs x and z must be the same length"
         assert z.shape[-1] == self.z_dim, "z must be (B, z_dim)"
-        if self.num_classes > 0:
-            assert class_id is not None, "class_id must not be None if num_classes > 0"
+        if self.num_classes > 1:
+            assert class_id is not None, "class_id must not be None if num_classes > 1"
             assert len(z) == len(class_id), "Inputs z and class_id must the same length"
 
         # 1). Process the input images, pass it through the CNN backbone to generate a deep latent rep.
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 64, 64) -> (B, 64, 64, 64)
         x = self.blocks(x)  # Pass through the residual CNN encoder blocks (B, 512, 4, 4)
+        x = self.final_conv(x)  # Pass through a final conv to max information along the spatial dimension
         x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
         x = torch.flatten(x, 1)  # Flatten (B, 512, 1, 1) -> (B, 512)
 
         # 2). Apply an MLP processing step to the input z-vector
         z = self.mlp_z(z)  # (B, z_dim) -> (B, 2*z_dim)
-        # Normalize the latent representation before passing it into the discriminator so that it does not
-        # simply learn that large magnitude z vectors from the encoder indicate real images
-        z = F.layer_norm(z, z.shape[-1:])
+        z = F.layer_norm(z, z.shape[-1:])  # Add layer norm to normalize values to avoid scale diffs
 
-        # 3). Apply an MLP processing step to the input class embedding if num_classes > 0
-        if self.num_classes > 0:
-            class_embed = self.mlp_c(self.class_embedding(class_id))  # (B,) -> (B, z_dim) -> (B, 2*z_dim)
-
-        # 4). Perform feature fusion by concatenating all inputs together and then passing to an MLP
+        # 3). Apply an MLP processing step to the input class embedding if num_classes > 0 and feature
+        # fusion by concatenating all inputs together and then passing to an MLP
         # With class conditioning: (B, 512) + (B, 2*z_dim) + (B, 2*z_dim) = (B, 512 + 4*z_dim)
         # Otherwise: (B, 512) + (B, 2*z_dim) = (B, 512 + 2*z_dim)
-        if self.num_classes > 0:
+        if self.num_classes > 1:
+            class_embed = self.mlp_c(self.class_embedding(class_id))  # (B,) -> (B, z_dim) -> (B, 2*z_dim)
+            class_embed = F.layer_norm(class_embed, class_embed.shape[-1:])
             x = torch.cat([x, z, class_embed], dim=1)
         else:
             x = torch.cat([x, z], dim=1)

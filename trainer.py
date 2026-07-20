@@ -395,7 +395,7 @@ class Trainer:
         :returns: E_loss, the encoder loss averaged over the batch.
         """
         self.opt_encoder.zero_grad(set_to_none=True)
-        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
+        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, )
         z_pred = self.encoder(x_real, class_id)  # Encoder z prediction (B, z_dim)
         set_requires_grad(self.discriminator, False)  # Freeze the critic to save memory
@@ -408,7 +408,7 @@ class Trainer:
         latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean()  # Regularize towards each z_dim to be mean 0
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
         latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
-        E_loss += latent_reg  # Add the regularization penalty to encourage N(0, 1) behavior
+        E_loss += latent_reg * 0.01  # Add the regularization penalty to encourage N(0, 1) behavior
         return E_loss
 
     @compute_with_amp
@@ -454,24 +454,26 @@ class Trainer:
         z_interp.requires_grad_(True)  # z_pred and z don't have gradients, turn them on for this calc
         # Here we will penalize gradients both with respect to the interpolated image and z-vector, to enforce
         # the condition on the joint feature space which is required in the bi-GAN setting
-        scores = self.discriminator(x_interp, z_interp, class_id).squeeze()  # Compute critic scores (B, )
-        # Compute the gradient of the critic scores wrt the input interpolated x_interp
-        # (B, 3, 128, 128), (B, z_dim)
-        grad_x, grad_z = torch.autograd.grad(outputs=scores, inputs=[x_interp, z_interp],
-                                             grad_outputs=torch.ones_like(scores), create_graph=True)
-        # Flatten (B, 3, 128, 128) -> (B, 3*128*128), partial derivatives wrt to each image as row vectors
-        # then compute the Euclidean (L2) norm of each row ||grad_x D(x,z)||_2
-        grad_x = grad_x.reshape(batch_size, -1)  # (B, 3, 128, 128) -> (B, 49152)
-        grad = torch.cat([grad_x, grad_z], dim=1)  # (B, 49152 + z_dim)
-        grad_norm = grad.norm(2, dim=1)  # (B, )
-        # Penalize deviations from 1, as shown in the WGAN-GP paper i.e. a 1-Lipschitz function satisfies
-        # ||grad_x D(x,z)||_2 == 1 along the sampled interpolated points between the 2 distributions,
-        # real and fake. Compute the MSE of the grad_norm vs 1.0 everywhere
-        # If it's too steep, the gradient norm is greater than 1, so the penalty pushes it to flatten
-        # If it's too flat, the gradient norm is less than 1, so the penalty encourages steeper slopes
-        # During training, this nudges the critic toward having a gradient magnitude close to 1 on the
-        # interpolated points, which is the smoothness condition WGAN-GP is enforcing
-        grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
+        with torch.autocast(device_type="cuda", enabled=False):  # Turn off AMP (if any) for the GP calc to
+            # avoid potential numerical instability issues
+            scores = self.discriminator(x_interp, z_interp, class_id).squeeze()  # Compute critic scores (B, )
+            # Compute the gradient of the critic scores wrt the input interpolated x_interp
+            # (B, 3, 128, 128), (B, z_dim)
+            grad_x, grad_z = torch.autograd.grad(outputs=scores, inputs=[x_interp, z_interp],
+                                                 grad_outputs=torch.ones_like(scores), create_graph=True)
+            # Flatten (B, 3, 128, 128) -> (B, 3*128*128), partial derivatives wrt to each image as row vectors
+            # then compute the Euclidean (L2) norm of each row ||grad_x D(x,z)||_2
+            grad_x = grad_x.reshape(batch_size, -1)  # (B, 3, 128, 128) -> (B, 49152)
+            grad = torch.cat([grad_x, grad_z], dim=1)  # (B, 49152 + z_dim)
+            grad_norm = grad.norm(2, dim=1)  # (B, )
+            # Penalize deviations from 1, as shown in the WGAN-GP paper i.e. a 1-Lipschitz function satisfies
+            # ||grad_x D(x,z)||_2 == 1 along the sampled interpolated points between the 2 distributions,
+            # real and fake. Compute the MSE of the grad_norm vs 1.0 everywhere
+            # If it's too steep, the gradient norm is greater than 1, so the penalty pushes it to flatten
+            # If it's too flat, the gradient norm is less than 1, so the penalty encourages steeper slopes
+            # During training, this nudges the critic toward having a gradient magnitude close to 1 on the
+            # interpolated points, which is the smoothness condition WGAN-GP is enforcing
+            grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
         if self.step % 500 == 0:
@@ -652,7 +654,7 @@ class Trainer:
                 del latent_cycle_loss, loss, G_grad, E_grad
                 pbar.update(1)
 
-    def train(self, new_lr: float = None, freeze_encoder: bool = False) -> None:
+    def train(self, new_lr: float = None) -> None:
         """
         Runs the training loop for the Wasserstein Bi-GAN until completion for self.num_steps total
         training iterations.
@@ -668,12 +670,6 @@ class Trainer:
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
-
-        if freeze_encoder is True:
-            self.logger.info("Freezing encoder model")
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-            self.encoder.eval()
 
         self.logger.info(f"Starting Training, device={self.device}, amp_dtype={self.amp_dtype}")
         for model in self.models:  # Report the learning rate and weight decay of all the models
@@ -708,15 +704,11 @@ class Trainer:
                     self.scaler.update()
 
                 # Encoder update
-                if freeze_encoder is False:
-                    E_loss = self.compute_E_loss(batch)  # Compute the E loss over this batch with grads
-                    self.compute_gradients(E_loss)  # Call backwards() on the loss to compute gradients
-                    E_grad = self.optimizer_step(self.encoder)  # Update model params of E
-                    if self.scaler is not None:  # Only call update() iff using this approach
-                        self.scaler.update()
-                else:  # If we have frozen the encoder, then no gradient updates will be made to it
-                    E_loss = torch.tensor(0.0, device=self.device)
-                    E_grad = np.nan
+                E_loss = self.compute_E_loss(batch)  # Compute the E loss over this batch with grads
+                self.compute_gradients(E_loss)  # Call backwards() on the loss to compute gradients
+                E_grad = self.optimizer_step(self.encoder)  # Update model params of E
+                if self.scaler is not None:  # Only call update() iff using this approach
+                    self.scaler.update()
 
                 pbar.set_postfix(
                     G_loss=f"{G_loss.item():.1f}", G_grad=f"{G_grad:.1f}",
