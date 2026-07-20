@@ -408,7 +408,7 @@ class Trainer:
         latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean()  # Regularize towards each z_dim to be mean 0
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
         latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
-        E_loss += latent_reg * 0.01  # Add the regularization penalty to encourage N(0, 1) behavior
+        E_loss += latent_reg * 0.1  # Add the regularization penalty to encourage N(0, 1) behavior
         return E_loss
 
     @compute_with_amp
@@ -476,7 +476,7 @@ class Trainer:
             grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
-        if self.step % 500 == 0:
+        if self.step % 100 == 0:
             print(f"\nStep: {self.step}")
             print("   ",
                   f"D_real={D_loss_real.item():.1f}",
