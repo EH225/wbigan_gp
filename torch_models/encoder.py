@@ -169,7 +169,7 @@ class Encoder(nn.Module):
         # image concatenated with the class_embed vector and outputs a predicted latent z-vector
         self.norm = nn.LayerNorm(512)
         # (B, 512 + z_dim) -> (B, z_dim) if classes are provided, else (B, 512) -> (B, z_dim)
-        self.fc = nn.Linear(512 + (z_dim if self.num_classes > 1 else 0), z_dim)
+        self.fc = nn.Linear(512, z_dim)
 
     def forward(self, x: torch.Tensor, class_id: torch.Tensor = None) -> torch.Tensor:
         """
