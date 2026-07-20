@@ -185,12 +185,15 @@ class Encoder(nn.Module):
             assert class_id is not None, "class_id must not be None if num_classes > 0"
             assert len(x) == len(class_id), "Inputs x and class_id must the same length"
 
-        class_embed = self.class_embedding(class_id) if self.num_classes > 1 else None
+        cond_vec = self.class_embedding(class_id) if self.num_classes > 1 else None
 
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 64, 64) -> (B, 64, 64, 64)
         # Pass through the residual CNN encoder blocks (B, 512, 4, 4) with self-attention
         for block in self.blocks:
-            x = block(x, class_embed)
+            if isinstance(block, ResDownBlock):
+                x = block(x, cond_vec)
+            else:  # Multi-headed self-attention doesn't require the input cond_vec
+                x = block(x)
 
         x = self.final_conv(x)  # Pass through a final conv to max information along the spatial dimension
         x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
