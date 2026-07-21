@@ -388,7 +388,7 @@ class Trainer:
         with torch.no_grad():  # Do not track gradients back into the generator
             z_pred = self.encoder(x_real, class_id)
         recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
-        G_loss += recon_loss * 1.0
+        G_loss += 0.5 * recon_loss
 
         return G_loss
 
@@ -423,7 +423,7 @@ class Trainer:
         with torch.no_grad():  # Do not track gradients back into the generator
             x_fake = self.generator(z, class_id)
         latent_cycle_loss = F.mse_loss(self.encoder(x_fake, class_id), z)
-        E_loss = E_loss * 0.1 + latent_cycle_loss * 5.0 + latent_reg * 1.0
+        E_loss = E_loss * 0.1 + latent_cycle_loss * 4.0 + latent_reg * 0.5
         return E_loss
 
     @compute_with_amp
