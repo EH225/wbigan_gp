@@ -412,13 +412,15 @@ class Trainer:
 
         # Add a latent cycle loss objective MSE[z z_pred = E(G(z))]
         z = torch.randn(len(x_real), self.z_dim, device=self.device)
-        with torch.no_grad():
+        with torch.no_grad():  # Do not track gradients back into the generator
             x_fake = self.generator(z, class_id)
-        z_cycle = self.encoder(x_fake, class_id)
-        latent_cycle_loss = F.mse_loss(z_cycle, z)
+        latent_cycle_loss = F.mse_loss(self.encoder(x_fake, class_id), z)
         # E_loss += latent_cycle_loss * 0.1
-
-        E_loss = E_loss * 0.1 + latent_cycle_loss * 5.0 + latent_reg * 0.1
+        if self.step % 10 == 0:
+            print("E_loss", E_loss)
+            print("latent_cycle_loss", latent_cycle_loss)
+            print("latent_reg", latent_reg)
+        E_loss = E_loss * 0.1 + latent_cycle_loss * 5.0 + latent_reg * 0.5
         return E_loss
 
     @compute_with_amp
