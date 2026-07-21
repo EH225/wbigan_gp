@@ -823,5 +823,12 @@ class Trainer:
         ]
         self.val_losses.append([self.step] + encoder_metrics + discriminator_metrics)  # Record for caching
 
+        #### 4). Also save a set of reconstructed image samples i.e. G(E(x_real)), use the last val batch
+        file_name = f"reconstructions-{self.step}.png"
+        titles = class_id[:20].detach().cpu().tolist()
+        titles = [f"{i} {self.class_labels[i]}" for i in titles]
+        x_hat = self.generator(self.encoder(x_real, class_id), class_id)
+        save_images(x_hat[:20].detach().cpu(), titles, 5, os.path.join(self.samples_folder, file_name))
+
         for model in self.models:  # Switch all models back to train mode
             model.train()
