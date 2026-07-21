@@ -443,7 +443,8 @@ class Trainer:
         # Add negative examples as well, explicitly train the critic care about mismatched pairs
         # (x_real, z_wrong) when training, this will be part of D_loss_real
         perm = torch.randperm(batch_size, device=self.device)  # A random permutation of indices
-        D_loss_fake += self.discriminator(x_real, z_pred[perm], class_id).mean()  # 
+        D_loss_neg_ex = self.discriminator(x_real, z_pred[perm].detach(), class_id).mean()
+        D_loss_fake = 0.5 * D_loss_fake + 0.5 * D_loss_neg_ex
         # Maximize: E[D(x_real, E(x_real))] - E[D(G(z), z)] subject to the Lipschitz F1 penalty
         D_loss = D_loss_fake - D_loss_real
 
@@ -487,17 +488,15 @@ class Trainer:
                   f"D_real={D_loss_real.item():.1f}",
                   f"D_fake={D_loss_fake.item():.1f}",
                   )
-
             print("   ",
                   f"|z|={z.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z vectors
                   f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z_pred vectors
                   )
-            print(
-                f"mean(std(z_pred))={z_pred.std(dim=0).mean():.2f}",  # Avg stddev along each z_pred dim
-                # Squared L2 distance from the first latent vector to every other one
-                f"mean(dist(z_pred))={torch.cdist(z_pred, z_pred).mean():.2f}"
-            )
-
+            print("   ",
+                  f"mean(std(z_pred))={z_pred.std(dim=0).mean():.2f}",  # Avg stddev along each z_pred dim
+                  # Squared L2 distance from the first latent vector to every other one
+                  f"mean(dist(z_pred))={torch.cdist(z_pred, z_pred).mean():.2f}"
+                  )
             print("   ",
                   f"GP={grad_penalty.item():.2f}",
                   f"grad_norm={grad_norm.mean().item():.2f}",
