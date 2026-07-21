@@ -418,7 +418,7 @@ class Trainer:
         latent_cycle_loss = F.mse_loss(z_cycle, z)
         # E_loss += latent_cycle_loss * 0.1
 
-        E_loss = E_loss * 0.1 + latent_cycle_loss * 1.0 + latent_reg * 0.1
+        E_loss = E_loss * 0.1 + latent_cycle_loss * 5.0 + latent_reg * 0.1
         return E_loss
 
     @compute_with_amp
