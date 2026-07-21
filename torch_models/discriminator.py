@@ -10,8 +10,59 @@ sys.path.insert(0, PARENT_DIR)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_models.encoder import ResDownBlock
 from torch_models.shared_components import SelfAttention
+
+
+class ResDownBlock(nn.Module):
+    """
+    Down-sampling convolution block with residual connections.
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, groups: int = 16):
+        """
+        Down-sampling convolution block with residual connections.
+
+        :param in_channels: The number of channels of the tensor expected as input.
+        :param out_channels: The number of channels to include in the output tensor.
+        :param groups: The number of groups for group norm.
+        """
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.groups = groups
+
+        self.resid_skip_conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, 1),  # Re-shape channels (B, out_channels, H, W)
+            nn.AvgPool2d(2),  # Down-sample by a factor of 2 (B, out_channels, H/2, W/2)
+        )
+
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1, stride=2)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+
+        self.activation = nn.LeakyReLU(0.2)
+
+        # Define a trainable scaling factor for the residual connection to improve stability
+        self.res_scale = nn.Parameter(torch.ones(1) * 0.1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through the down-sampling convolution residual block.
+
+        :param x: An input tensor of size (B, in_channels, H, W).
+        :returns: An output tensor of size (B, out_channels, H/2, W/2).
+        """
+        # Downsample x for the residual connection to match shapes for the output
+        x_resid = self.resid_skip_conv(x)  # (B, in_channels, H, W) -> (B, out_channels, H/2, W/2)
+
+        # Process the input tensor x through the down-sampling block, use a pre-norm layout
+        x = self.conv1(x)  # (B, in_channels, H, W) -> (B, out_channels, H/2, W/2)
+        x = self.activation(x)  # Apply SiLU (Sigmoid Linear Unit) activation
+
+        x = self.conv2(x)  # (B, out_channels, H/2, W/2) -> (B, out_channels, H/2, W/2)
+        x = self.activation(x)  # Apply SiLU (Sigmoid Linear Unit) activation
+
+        x = x * self.res_scale + x_resid  # Link with x_resid to form a residual connection
+        return x
 
 
 class Discriminator(nn.Module):
@@ -64,40 +115,39 @@ class Discriminator(nn.Module):
 
         # Define the discriminator CNN encoder backbone as a series of down-sampling residual conv blocks
         self.blocks = nn.Sequential(
-            ResDownBlock(64, 128, cond_dim=0),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
-            ResDownBlock(128, 256, cond_dim=0),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
+            ResDownBlock(64, 128),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
+            ResDownBlock(128, 256),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
             SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
-            ResDownBlock(256, 512, cond_dim=0),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
-            ResDownBlock(512, 512, cond_dim=0),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
+            ResDownBlock(256, 512),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
+            ResDownBlock(512, 512),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
         )
 
         # Add a final convolution to mix spatial information before compressing
         self.final_conv = nn.Sequential(
-            nn.GroupNorm(16, 512),
-            nn.SiLU(),
+            nn.LeakyReLU(0.2),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
         )  # (B, 512, 4, 4) -> (B, 512, 4, 4)
 
         # Define a small MLP to process the input latent z vector
         self.mlp_z = nn.Sequential(
             nn.Linear(self.z_dim, self.z_dim * 2),
-            nn.SiLU(),
+            nn.LeakyReLU(0.2),
             nn.Linear(self.z_dim * 2, self.z_dim * 2),
         )
 
         # Define a small MLP to process the class embedding vector
         self.mlp_c = nn.Sequential(
             nn.Linear(self.z_dim, self.z_dim * 2),
-            nn.SiLU(),
+            nn.LeakyReLU(0.2),
             nn.Linear(self.z_dim * 2, self.z_dim * 2),
         )
 
         # Define the final MLP that will operate on the fusion of all 3 inputs (x, z, class_embed)
         self.mlp = nn.Sequential(
             nn.Linear(512 + (4 if self.num_classes > 1 else 2) * self.z_dim, 512),
-            nn.SiLU(),
+            nn.LeakyReLU(0.2),
             nn.Linear(512, 256),
-            nn.SiLU(),
+            nn.LeakyReLU(0.2),
             nn.Linear(256, 1),
         )
 
@@ -127,7 +177,7 @@ class Discriminator(nn.Module):
 
         # 2). Apply an MLP processing step to the input z-vector
         z = self.mlp_z(z)  # (B, z_dim) -> (B, 2*z_dim)
-        z = F.layer_norm(z, z.shape[-1:])  # Add layer norm to normalize values to avoid scale diffs
+        # z = F.layer_norm(z, z.shape[-1:])  # Add layer norm to normalize values to avoid scale diffs
 
         # 3). Apply an MLP processing step to the input class embedding if num_classes > 0 and feature
         # fusion by concatenating all inputs together and then passing to an MLP
@@ -135,7 +185,7 @@ class Discriminator(nn.Module):
         # Otherwise: (B, 512) + (B, 2*z_dim) = (B, 512 + 2*z_dim)
         if self.num_classes > 1:
             class_embed = self.mlp_c(self.class_embedding(class_id))  # (B,) -> (B, z_dim) -> (B, 2*z_dim)
-            class_embed = F.layer_norm(class_embed, class_embed.shape[-1:])
+            # class_embed = F.layer_norm(class_embed, class_embed.shape[-1:])
             x = torch.cat([x, z, class_embed], dim=1)
         else:
             x = torch.cat([x, z], dim=1)
