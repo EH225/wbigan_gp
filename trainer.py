@@ -604,7 +604,7 @@ class Trainer:
                 mmd_loss = compute_mmd(z_pred, z)  # Further regularization towards the prior
 
                 ### Compute a gradient update now that the loss has been computed
-                loss = 0.1 * prior_loss + 10.0 * recon_loss + 1.0 * latent_cycle_loss + 10.0 * mmd_loss
+                loss = 0.5 * prior_loss + 5.0 * recon_loss + 5.0 * latent_cycle_loss + 0.5 * mmd_loss
                 self.compute_gradients(loss)  # Call backwards() on the loss to compute gradients
                 G_grad = self.optimizer_step(self.generator)  # Update model params of G
                 E_grad = self.optimizer_step(self.encoder)  # Update model params of E
