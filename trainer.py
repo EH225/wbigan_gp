@@ -646,7 +646,7 @@ class Trainer:
                     # the next save
                     self.train_losses, self.val_losses = [], []
                     # Generate new loss plots after saving additional loss data to disk
-                    generate_loss_plots(self.pretrain_losses_folder, self.results_folder)
+                    generate_loss_plots(self.pretrain_losses_folder, self.pretrain_samples_folder)
                     torch.cuda.empty_cache()
                     gc.collect()  # This will slow down training if called too often
 
@@ -792,7 +792,7 @@ class Trainer:
         z_pred_all = []
         D_loss_components = []
         for batch in self.val_dataloader:
-            x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 128, 128)
+            x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 64, 64)
             class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
             batch_size = len(x_real)  # Will be <= self.batch_size
             z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
@@ -823,7 +823,11 @@ class Trainer:
         ]
         self.val_losses.append([self.step] + encoder_metrics + discriminator_metrics)  # Record for caching
 
-        #### 4). Also save a set of reconstructed image samples i.e. G(E(x_real)), use the last val batch
+        #### 4). Also save a set of reconstructed image samples i.e. G(E(x_real)), use the first val batch
+        for batch in self.val_dataloader:
+            break  # Stop after we grab the first batch in the val dataloader
+        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 64, 64)
+        class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
         file_name = f"reconstructions-{self.step}.png"
         titles = class_id[:20].detach().cpu().tolist()
         titles = [f"{i} {self.class_labels[i]}" for i in titles]
