@@ -484,8 +484,11 @@ class Trainer:
                   )
 
             print("   ",
-                  f"|z|={z.norm(dim=1).mean():.2f}",
-                  f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",
+                  f"|z|={z.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z vectors
+                  f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z_pred vectors
+                  f"mean(std(z_pred))={z_pred.std(dim=0).mean():.2f}"  # Avg stddev along each z_pred dim
+                  # Squared L2 distance from the first latent vector to every other one
+                  f"mean(norm_diff(z_pred))={(z_pred[1:] - z_pred[0]).norm(dim=1).mean():.2f}"
                   )
 
             print("   ",
@@ -711,9 +714,9 @@ class Trainer:
                     self.scaler.update()
 
                 pbar.set_postfix(
-                    G_loss=f"{G_loss.item():.1f}", G_grad=f"{G_grad:.1f}",
-                    E_loss=f"{E_loss.item():.1f}", E_grad=f"{E_grad:.1f}",
-                    D_loss=f"{D_loss.item():.1f}", D_grad=f"{D_grad:.1f}", )
+                    G_loss=f"{G_loss.item():.2f}", G_grad=f"{G_grad:.2f}",
+                    E_loss=f"{E_loss.item():.2f}", E_grad=f"{E_grad:.2f}",
+                    D_loss=f"{D_loss.item():.2f}", D_grad=f"{D_grad:.2f}", )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
                 self.train_losses.append((self.step, G_loss.item(), E_loss.item(), D_loss.item(),

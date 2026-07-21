@@ -11,7 +11,7 @@ pretraining: # Specify parameters used for pretraining
   batch_size: 128
   lr: 1.0e-4
   weight_decay: 1.0e-5
-  num_steps: 15000
+  num_steps: 10000
   adam_betas: [ 0.9, 0.999 ]
   grad_clip: 5.0
   use_amp: True
