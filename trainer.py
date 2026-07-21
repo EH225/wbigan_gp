@@ -497,6 +497,10 @@ class Trainer:
             grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
+        dist = torch.cdist(z_pred, z_pred)
+        mask = ~torch.eye(len(z_pred), dtype=torch.bool, device=dist.device)
+        mean_dist = dist[mask].mean()
+
         if self.step % 100 == 0:
             print(f"\nStep: {self.step}")
             print("   ",
@@ -508,9 +512,9 @@ class Trainer:
                   f"|z_pred|={z_pred.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z_pred vectors
                   )
             print("   ",
-                  f"mean(std(z_pred))={z_pred.std(dim=0).mean():.2f}",  # Avg stddev along each z_pred dim
+                  f"std(z_pred)={z_pred.std(dim=0).mean():.2f}",  # Avg stddev along each z_pred dim
                   # Squared L2 distance from the first latent vector to every other one
-                  f"mean(dist(z_pred))={torch.cdist(z_pred, z_pred).mean():.2f}"
+                  f"dist(z_pred)={mean_dist:.2f}"
                   )
             print("   ",
                   f"GP={grad_penalty.item():.2f}",
