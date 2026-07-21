@@ -409,6 +409,15 @@ class Trainer:
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
         latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
         E_loss += latent_reg * 0.1  # Add the regularization penalty to encourage N(0, 1) behavior
+
+        # Add a latent cycle loss objective MSE[z z_pred = E(G(z))]
+        z = torch.randn(len(x_real), self.z_dim, device=self.device)
+        with torch.no_grad():
+            x_fake = self.generator(z, class_id)
+        z_cycle = self.encoder(x_fake, class_id)
+        latent_cycle_loss = F.mse_loss(z_cycle, z)
+        E_loss += latent_cycle_loss * 0.1
+
         return E_loss
 
     @compute_with_amp
@@ -442,9 +451,9 @@ class Trainer:
 
         # Add negative examples as well, explicitly train the critic care about mismatched pairs
         # (x_real, z_wrong) when training, this will be part of D_loss_real
-        perm = torch.randperm(batch_size, device=self.device)  # A random permutation of indices
-        D_loss_neg_ex = self.discriminator(x_real, z_pred[perm].detach(), class_id).mean()
-        D_loss_fake = 0.5 * D_loss_fake + 0.5 * D_loss_neg_ex
+        # perm = torch.randperm(batch_size, device=self.device)  # A random permutation of indices
+        # D_loss_neg_ex = self.discriminator(x_real, z_pred[perm].detach(), class_id).mean()
+        # D_loss_fake = 0.5 * D_loss_fake + 0.5 * D_loss_neg_ex  # Average the 2 losses to preserve scale
         # Maximize: E[D(x_real, E(x_real))] - E[D(G(z), z)] subject to the Lipschitz F1 penalty
         D_loss = D_loss_fake - D_loss_real
 
