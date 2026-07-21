@@ -408,7 +408,7 @@ class Trainer:
         latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean()  # Regularize towards each z_dim to be mean 0
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
         latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
-        E_loss += latent_reg * 0.1  # Add the regularization penalty to encourage N(0, 1) behavior
+        # E_loss += latent_reg * 0.1  # Add the regularization penalty to encourage N(0, 1) behavior
 
         # Add a latent cycle loss objective MSE[z z_pred = E(G(z))]
         z = torch.randn(len(x_real), self.z_dim, device=self.device)
@@ -416,8 +416,9 @@ class Trainer:
             x_fake = self.generator(z, class_id)
         z_cycle = self.encoder(x_fake, class_id)
         latent_cycle_loss = F.mse_loss(z_cycle, z)
-        E_loss += latent_cycle_loss * 0.1
+        # E_loss += latent_cycle_loss * 0.1
 
+        E_loss = E_loss * 0.1 + latent_cycle_loss * 1.0 + latent_reg * 0.1
         return E_loss
 
     @compute_with_amp
