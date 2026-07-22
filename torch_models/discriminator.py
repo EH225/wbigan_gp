@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_models.shared_components import SelfAttention
+import numpy as np
 
 
 class ResDownBlock(nn.Module):
@@ -113,14 +114,16 @@ class Discriminator(nn.Module):
         self.input_conv = nn.Conv2d(3, 64, 3, padding=1)  # Out: (B, 64, 64, 64)
 
         # Define the discriminator CNN encoder backbone as a series of down-sampling residual conv blocks
-        self.blocks = nn.Sequential(
-            ResDownBlock(64, 128),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
-            ResDownBlock(128, 256),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
-            ResDownBlock(256, 512),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
-            ResDownBlock(512, 512),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
-            ResDownBlock(512, 512),  # (B, 512, 4, 4) -> (B, 512, 2, 2)
-            ResDownBlock(512, 512),  # (B, 512, 2, 2) -> (B, 512, 1, 1)
-        )
+        channel_schedule = [(64, 128), (128, 256), (256, 512)]
+        channel_schedule += [(512, 512)] * (int(np.log2(self.image_dim)) - 3)  # End with (B, 512, 1, 1)
+        # E.g. for image_size=64
+        # (B, 64, 64, 64) -> (B, 128, 32, 32)
+        # (B, 128, 32, 32) -> (B, 256, 16, 16)
+        # (B, 256, 16, 16) -> (B, 512, 8, 8)
+        # (B, 512, 8, 8) -> (B, 512, 4, 4)
+        # (B, 512, 4, 4) -> (B, 512, 2, 2)
+        # (B, 512, 2, 2) -> (B, 512, 1, 1)
+        self.blocks = nn.Sequential(*[ResDownBlock(*channels) for channels in channel_schedule])
 
         # Define a small MLP to process the input latent z vector
         self.mlp_z = nn.Sequential(
@@ -168,8 +171,8 @@ class Discriminator(nn.Module):
 
         # 1). Process the input images, pass it through the CNN backbone to generate a deep latent rep.
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 64, 64) -> (B, 64, 64, 64)
-        x = self.blocks(x)  # Pass through the residual CNN encoder blocks (B, 512, 2, 2)
-        x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
+        x = self.blocks(x)  # Pass through the residual CNN encoder blocks (B, 512, 1, 1)
+        # x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
         x = torch.flatten(x, 1)  # Flatten (B, 512, 1, 1) -> (B, 512)
 
         # 2). Apply an MLP processing step to the input z-vector
@@ -181,7 +184,7 @@ class Discriminator(nn.Module):
         # Otherwise: (B, 512) + (B, 512 + 512) = (B, 1024)
         if self.num_classes > 1:
             class_embed = self.mlp_c(self.class_embedding(class_id))  # (B,) -> (B, z_dim) -> (B, 2*z_dim)
-            x = torch.cat([x, z, x*z, class_embed], dim=1)  # (B, 512 * 3 + 2*z_dim)
+            x = torch.cat([x, z, x * z, class_embed], dim=1)  # (B, 512 * 3 + 2*z_dim)
         else:
-            x = torch.cat([x, z, x*z], dim=1)  # (B, 512 * 3)
+            x = torch.cat([x, z, x * z], dim=1)  # (B, 512 * 3)
         return self.mlp(x)  # (B, 1)
