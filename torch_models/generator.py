@@ -170,7 +170,7 @@ class Generator(nn.Module):
         self.blocks = nn.ModuleList([
             ResUpBlock(512, 512, cond_dim=cond_dim),  # (B, 512, 4, 4) -> (B, 512, 8, 8)
             ResUpBlock(512, 256, cond_dim=cond_dim),  # (B, 512, 8, 8) -> (B, 256, 16, 16)
-            SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
+            # SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
             ResUpBlock(256, 128, cond_dim=cond_dim),  # (B, 256, 16, 16) -> (B, 128, 32, 32)
             ResUpBlock(128, 64, cond_dim=cond_dim),  # (B, 128, 32, 32) -> (B, 64, 64, 64)
         ])
