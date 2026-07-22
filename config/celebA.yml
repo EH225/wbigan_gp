@@ -21,7 +21,7 @@ pretraining: # Specify parameters used for pretraining
 
 training: # Specify parameters used for training
   batch_size: 256
-  lr: 5.0e-5 # 1.0e-4  # 5.5e-5
+  lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
   num_steps: 50000
   adam_betas: [ 0.1, 0.9 ]

@@ -141,7 +141,7 @@ class Discriminator(nn.Module):
 
         # Define the final MLP that will operate on the fusion of all 3 inputs (x, z, class_embed)
         self.mlp = nn.Sequential(
-            nn.Linear(512 * 3 + (self.z_dim * 2 if self.num_classes > 1 else 0), 1024),
+            nn.Linear(512 * 2 + (self.z_dim * 2 if self.num_classes > 1 else 0), 1024),
             nn.LeakyReLU(0.2),
             nn.Linear(1024, 512),
             nn.LeakyReLU(0.2),
@@ -184,7 +184,7 @@ class Discriminator(nn.Module):
         # Otherwise: (B, 512) + (B, 512 + 512) = (B, 1024)
         if self.num_classes > 1:
             class_embed = self.mlp_c(self.class_embedding(class_id))  # (B,) -> (B, z_dim) -> (B, 2*z_dim)
-            x = torch.cat([x, z, x * z, class_embed], dim=1)  # (B, 512 * 3 + 2*z_dim)
+            x = torch.cat([x, z, class_embed], dim=1)  # (B, 512 * 2 + 2*z_dim)
         else:
-            x = torch.cat([x, z, x * z], dim=1)  # (B, 512 * 3)
+            x = torch.cat([x, z], dim=1)  # (B, 512 * 2)
         return self.mlp(x)  # (B, 1)

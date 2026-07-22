@@ -151,19 +151,20 @@ class Encoder(nn.Module):
 
         # Define the encoder backbone as a series of down-sampling residual conv blocks
         self.blocks = nn.ModuleList([
-            ResDownBlock(64, 128, cond_dim=cond_dim),  # (B, 64, 64, 64) -> (B, 128, 32, 32)
-            ResDownBlock(128, 256, cond_dim=cond_dim),  # (B, 128, 32, 32) -> (B, 256, 16, 16)
-            SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
-            ResDownBlock(256, 512, cond_dim=cond_dim),  # (B, 256, 16, 16) -> (B, 512, 8, 8)
-            ResDownBlock(512, 512, cond_dim=cond_dim),  # (B, 512, 8, 8) -> (B, 512, 4, 4)
-        ])
-
-        # Add a final convolution to mix spatial information before compressing
-        self.final_conv = nn.Sequential(
-            nn.GroupNorm(16, 512),
-            nn.SiLU(),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-        )  # (B, 512, 4, 4) -> (B, 512, 4, 4)
+                                        ResDownBlock(64, 128, cond_dim=cond_dim),
+                                        # (B, 64, 64, 64) -> (B, 128, 32, 32)
+                                        ResDownBlock(128, 256, cond_dim=cond_dim),
+                                        # (B, 128, 32, 32) -> (B, 256, 16, 16)
+                                        SelfAttention(256),  # (B, 256, 16, 16) -> (B, 256, 16, 16)
+                                        ResDownBlock(256, 512, cond_dim=cond_dim),
+                                        # (B, 256, 16, 16) -> (B, 512, 8, 8)
+                                        ResDownBlock(512, 512, cond_dim=cond_dim),
+                                        # (B, 512, 8, 8) -> (B, 512, 4, 4)
+                                        ResDownBlock(512, 512, cond_dim=cond_dim),
+                                        # (B, 512, 4, 4) -> (B, 512, 2, 2)
+                                    ] + [ResDownBlock(512, 512, cond_dim=cond_dim)
+                                         for _ in range([32, 64, 128].index(self.image_dim))])
+        # This encoder block always ends with (B, 512, 1, 1) as tine final shape for all image_dim
 
         # This fully connected layer takes the deep latent feature representation of the input
         # image concatenated with the class_embed vector and outputs a predicted latent z-vector
@@ -189,14 +190,12 @@ class Encoder(nn.Module):
 
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 64, 64) -> (B, 64, 64, 64)
         # Pass through the residual CNN encoder blocks (B, 512, 4, 4) with self-attention
-        for block in self.blocks:
+        for block in self.blocks:  # (B, 512, 1, 1)
             if isinstance(block, ResDownBlock):
                 x = block(x, cond_vec)
             else:  # Multi-headed self-attention doesn't require the input cond_vec
                 x = block(x)
 
-        x = self.final_conv(x)  # Pass through a final conv to max information along the spatial dimension
-        x = F.adaptive_avg_pool2d(x, 1)  # Downsample further (B, 512, 1, 1)
         x = torch.flatten(x, 1)  # Flatten (B, 512, 1, 1) -> (B, 512)
         z_hat = self.fc(self.norm(x))  # Compute a predicted latent representation (B, z_dim)
         return z_hat

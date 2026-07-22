@@ -371,6 +371,7 @@ class Trainer:
         :param batch: An input batch of data from the dataloader.
         :returns: G_loss, the generator loss averaged over the batch.
         """
+        set_requires_grad(self.generator, True)  # Make sure gradients are tracked for this model
         self.opt_generator.zero_grad(set_to_none=True)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, )
         batch_size = len(class_id)  # Will be <= self.batch_size
@@ -383,12 +384,13 @@ class Trainer:
 
         set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
 
-        # # Add a reconstruction loss objective as well to the loss
-        # x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
-        # with torch.no_grad():  # Do not track gradients back into the generator
-        #     z_pred = self.encoder(x_real, class_id)
-        # recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
-        # G_loss += 0.5 * recon_loss
+        # Add a reconstruction loss objective as well to the loss
+        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
+        set_requires_grad(self.encoder, False)  # Do not track gradients back into the encoder
+        z_pred = self.encoder(x_real, class_id)
+        set_requires_grad(self.encoder, True)  # Unfreeze the parameters after editing
+        recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
+        G_loss += 0.5 * recon_loss
 
         return G_loss
 
@@ -402,6 +404,7 @@ class Trainer:
         :param batch: An input batch of data from the dataloader.
         :returns: E_loss, the encoder loss averaged over the batch.
         """
+        set_requires_grad(self.encoder, True)  # Make sure gradients are tracked for this model
         self.opt_encoder.zero_grad(set_to_none=True)
         x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, )
@@ -409,14 +412,13 @@ class Trainer:
         set_requires_grad(self.discriminator, False)  # Freeze the critic to save memory
 
         # Train the encoder to produce z vectors that the critic assigns high scores to
-        E_loss = (-1) * self.discriminator(x_real, z_pred, class_id).mean()
+        adv_loss = (-1) * self.discriminator(x_real, z_pred, class_id).mean()
         set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
 
         # Add regularization to encourage the z_pred distribution to directly match that of the prior (N, I)
         latent_reg = (z_pred.mean(dim=0) - 0.0).pow(2).mean()  # Regularize towards each z_dim to be mean 0
         latent_reg += (z_pred.std(dim=0) - 1.0).pow(2).mean()  # Regularize towards each z_dim to be stddev 1
         latent_reg += (z_pred.pow(2).sum(dim=1).mean() - self.z_dim).pow(2)  # Apply L2 regularization
-        # E_loss += latent_reg * 0.1  # Add the regularization penalty to encourage N(0, 1) behavior
 
         # Add a latent cycle loss objective MSE[z z_pred = E(G(z))]
         z = torch.randn(len(x_real), self.z_dim, device=self.device)
@@ -425,11 +427,12 @@ class Trainer:
         latent_cycle_loss = F.mse_loss(self.encoder(x_fake, class_id), z)
 
         # Add a reconstruction loss objective as well to the encoder loss
-        with torch.no_grad():  # Do not track gradients back into the generator
-            x_hat = self.generator(z_pred, class_id)  # Use the encoder outputs to reconstruct x_real
+        set_requires_grad(self.generator, False)  # Freeze the generator model parameters
+        x_hat = self.generator(z_pred, class_id)  # Use the encoder outputs to reconstruct x_real
         recon_loss = F.l1_loss(x_hat, x_real)
+        set_requires_grad(self.generator, True)  # Unfreeze the generator model parameters
 
-        E_loss = 0.1 * E_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
+        E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
         return E_loss
 
     @compute_with_amp
@@ -443,6 +446,7 @@ class Trainer:
         :param batch: An input batch of data from the dataloader.
         :returns: D_loss, the discriminator loss averaged over the batch.
         """
+        set_requires_grad(self.discriminator, True)  # Make sure gradients are tracked for this model
         self.opt_discriminator.zero_grad(set_to_none=True)
         x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 64, 64)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
