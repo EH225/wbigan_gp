@@ -192,8 +192,8 @@ class Encoder(nn.Module):
         cond_vec = self.class_embedding(class_id) if self.num_classes > 1 else None
 
         x = self.input_conv(x)  # Apply an initial conv (B, 3, 64, 64) -> (B, 64, 64, 64)
-        # Pass through the residual CNN encoder blocks (B, 512, 4, 4) with self-attention
-        for block in self.blocks:  # (B, 512, 1, 1)
+        # Pass through the residual CNN encoder blocks with self-attention (B, 512, 1, 1)
+        for block in self.blocks:
             if isinstance(block, ResDownBlock):
                 x = block(x, cond_vec)
             else:  # Multi-headed self-attention doesn't require the input cond_vec
