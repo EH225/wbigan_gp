@@ -383,12 +383,12 @@ class Trainer:
 
         set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
 
-        # Add a reconstruction loss objective as well to the loss
-        x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
-        with torch.no_grad():  # Do not track gradients back into the generator
-            z_pred = self.encoder(x_real, class_id)
-        recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
-        G_loss += 0.5 * recon_loss
+        # # Add a reconstruction loss objective as well to the loss
+        # x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, image_size, image_size)
+        # with torch.no_grad():  # Do not track gradients back into the generator
+        #     z_pred = self.encoder(x_real, class_id)
+        # recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
+        # G_loss += 0.5 * recon_loss
 
         return G_loss
 
@@ -423,7 +423,13 @@ class Trainer:
         with torch.no_grad():  # Do not track gradients back into the generator
             x_fake = self.generator(z, class_id)
         latent_cycle_loss = F.mse_loss(self.encoder(x_fake, class_id), z)
-        E_loss = E_loss * 0.1 + latent_cycle_loss * 5.0 + latent_reg * 0.8
+
+        # Add a reconstruction loss objective as well to the encoder loss
+        with torch.no_grad():  # Do not track gradients back into the generator
+            x_hat = self.generator(z_pred, class_id)  # Use the encoder outputs to reconstruct x_real
+        recon_loss = F.l1_loss(x_hat, x_real)
+
+        E_loss = 0.1 * E_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
         return E_loss
 
     @compute_with_amp

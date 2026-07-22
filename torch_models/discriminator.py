@@ -116,7 +116,7 @@ class Discriminator(nn.Module):
         # Define the discriminator CNN encoder backbone as a series of down-sampling residual conv blocks
         channel_schedule = [(64, 128), (128, 256), (256, 512)]
         channel_schedule += [(512, 512)] * (int(np.log2(self.image_dim)) - 3)  # End with (B, 512, 1, 1)
-        # E.g. for image_size=64
+        # E.g. for image_size = 64
         # (B, 64, 64, 64) -> (B, 128, 32, 32)
         # (B, 128, 32, 32) -> (B, 256, 16, 16)
         # (B, 256, 16, 16) -> (B, 512, 8, 8)
@@ -143,9 +143,9 @@ class Discriminator(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(512 * 3 + (self.z_dim * 2 if self.num_classes > 1 else 0), 1024),
             nn.LeakyReLU(0.2),
-            nn.Linear(1024, 1024),
+            nn.Linear(1024, 512),
             nn.LeakyReLU(0.2),
-            nn.Linear(1024, 1),
+            nn.Linear(512, 1),
         )
 
         # Initialize the final layer's weights at zero
