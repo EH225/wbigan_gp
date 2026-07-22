@@ -168,9 +168,12 @@ class Encoder(nn.Module):
 
         # This fully connected layer takes the deep latent feature representation of the input
         # image concatenated with the class_embed vector and outputs a predicted latent z-vector
-        self.norm = nn.LayerNorm(512)
         # (B, 512 + z_dim) -> (B, z_dim) if classes are provided, else (B, 512) -> (B, z_dim)
-        self.fc = nn.Linear(512, z_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, self.z_dim),
+        )
 
     def forward(self, x: torch.Tensor, class_id: torch.Tensor = None) -> torch.Tensor:
         """
@@ -197,5 +200,5 @@ class Encoder(nn.Module):
                 x = block(x)
 
         x = torch.flatten(x, 1)  # Flatten (B, 512, 1, 1) -> (B, 512)
-        z_hat = self.fc(self.norm(x))  # Compute a predicted latent representation (B, z_dim)
+        z_hat = self.mlp(x)  # Compute a predicted latent representation (B, z_dim)
         return z_hat
