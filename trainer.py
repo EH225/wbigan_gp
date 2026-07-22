@@ -377,11 +377,10 @@ class Trainer:
         batch_size = len(class_id)  # Will be <= self.batch_size
         z = torch.randn(batch_size, self.z_dim, device=self.device)  # (B, z_dim)
         x_fake = self.generator(z, class_id)  # Generate fake images (B, 3, image_size, image_size)
-        set_requires_grad(self.discriminator, False)  # Freeze the critic to save memory
 
         # Train the generator to produce images that the critic assigns high scores to
-        G_loss = (-1) * self.discriminator(x_fake, z, class_id).mean()
-
+        set_requires_grad(self.discriminator, False)  # Freeze the critic to save memory
+        adv_loss = (-1) * self.discriminator(x_fake, z, class_id).mean()
         set_requires_grad(self.discriminator, True)  # Unfreeze the critic model parameters
 
         # Add a reconstruction loss objective as well to the loss
@@ -390,7 +389,15 @@ class Trainer:
         z_pred = self.encoder(x_real, class_id)
         set_requires_grad(self.encoder, True)  # Unfreeze the parameters after editing
         recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
-        G_loss += 0.5 * recon_loss
+        G_loss = 1.0 * adv_loss + 0.5 * recon_loss
+
+        if self.step % 100 == 0:
+            print(f"\nGenerator Losses - Step: {self.step}")
+            print("   ",
+                  f"adv_loss={adv_loss.item():.2f}",
+                  f"recon_loss={recon_loss.item():.2f}",
+                  f"G_loss={G_loss.item():.2f}",
+                  )
 
         return G_loss
 
@@ -433,6 +440,19 @@ class Trainer:
         set_requires_grad(self.generator, True)  # Unfreeze the generator model parameters
 
         E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
+
+        if self.step % 100 == 0:
+            print(f"\nEncoder Losses - Step: {self.step}")
+            print("   ",
+                  f"adv_loss={adv_loss.item():.1f}",
+                  f"latent_cycle_loss={latent_cycle_loss.item():.1f}",
+                  )
+            print("   ",
+                  f"latent_reg={latent_reg.item():.2f}",
+                  f"recon_loss={recon_loss.item():.2f}",
+                  f"E_loss={E_loss.item():.2f}",
+                  )
+
         return E_loss
 
     @compute_with_amp
@@ -507,15 +527,16 @@ class Trainer:
             grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
-        dist = torch.cdist(z_pred, z_pred)
-        mask = ~torch.eye(len(z_pred), dtype=torch.bool, device=dist.device)
-        mean_dist = dist[mask].mean()
-
         if self.step % 100 == 0:
-            print(f"\nStep: {self.step}")
+            dist = torch.cdist(z_pred, z_pred)
+            mask = ~torch.eye(len(z_pred), dtype=torch.bool, device=dist.device)
+            mean_dist = dist[mask].mean()
+
+            print(f"\nDiscriminator Losses - Step: {self.step}")
             print("   ",
                   f"D_real={D_loss_real.item():.1f}",
                   f"D_fake={D_loss_fake.item():.1f}",
+                  f"diff={D_loss_real.item() - D_loss_fake.item():.1f}",
                   )
             print("   ",
                   f"|z|={z.norm(dim=1).mean():.2f}",  # Avg L2 norm of the z vectors
