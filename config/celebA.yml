@@ -23,7 +23,7 @@ training: # Specify parameters used for training
   batch_size: 256
   lr: 1.0e-4 # 1.0e-4  # 5.5e-5
   weight_decay: 0.0e-0
-  num_steps: 50000
+  num_steps: 150000
   adam_betas: [ 0.1, 0.9 ]
   grad_clip: 10.0
   use_amp: True
