@@ -175,7 +175,7 @@ class Encoder(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(512, self.z_dim),
         )
-        
+
     def forward(self, x: torch.Tensor, class_id: torch.Tensor = None) -> torch.Tensor:
         """
         Forward pass through the encoder model. Encoder(real_image, class_id) -> z_hat
