@@ -79,7 +79,7 @@ def compute_mmd(x, y, sigmas=(1, 2, 4, 8, 16)):
     yy = torch.cdist(y, y).pow(2)
     xy = torch.cdist(x, y).pow(2)
 
-    mmd = 0.0
+    mmd = torch.zeros((), device=x.device, dtype=x.dtype)
     for sigma in sigmas:
         gamma = 1.0 / (2 * sigma ** 2)
 
@@ -275,7 +275,7 @@ class Trainer:
 
         # Save down all the loss values produced by models training since the last caching
         if pretrain:
-            train_loss_cols = ["step", "prior_loss", "recon_loss", "latent_cycle_loss"]
+            train_loss_cols = ["step", "prior_loss", "mmd_loss", "recon_loss", "latent_cycle_loss", "loss"]
             val_loss_cols = []
         else:
             train_loss_cols = ["step", "G_loss", "E_loss", "D_loss", "D_loss_real", "D_loss_fake",
@@ -440,6 +440,7 @@ class Trainer:
         set_requires_grad(self.generator, True)  # Unfreeze the generator model parameters
 
         E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
+        # E_loss = (0.1 * adv_loss) + (2.0 * latent_cycle_loss) + (0.8 * latent_reg) + (0.2 * recon_loss)
 
         if self.step % 100 == 0:
             print(f"\nEncoder Losses - Step: {self.step}")
@@ -663,7 +664,7 @@ class Trainer:
                 mmd_loss = compute_mmd(z_pred, z)  # Further regularization towards the prior
 
                 ### Compute a gradient update now that the loss has been computed
-                loss = 0.5 * prior_loss + 5.0 * recon_loss + 5.0 * latent_cycle_loss + 0.5 * mmd_loss
+                loss = (0.5 * prior_loss) + (0.5 * mmd_loss) + (5.0 * recon_loss) + (5.0 * latent_cycle_loss)
                 self.compute_gradients(loss)  # Call backwards() on the loss to compute gradients
                 G_grad = self.optimizer_step(self.generator)  # Update model params of G
                 E_grad = self.optimizer_step(self.encoder)  # Update model params of E
@@ -671,15 +672,18 @@ class Trainer:
                     self.scaler.update()
 
                 pbar.set_postfix_str(
-                    f"prior_loss: {prior_loss.item():.2f}, mmd_loss: {mmd_loss:.2f} "
+                    f"prior_loss: {prior_loss.item():.2f},"
+                    f" mmd_loss: {mmd_loss:.2f}, "
                     f"recon_loss: {recon_loss.item():.2f}, "
-                    f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, G_grad: {G_grad:.2f}, "
-                    f"E_grad: {E_grad:.2f}"
+                    f"latent_cycle_loss: {latent_cycle_loss.item():.2f}, "
+                    f"loss: {loss.item():.2f}, ",
+                    f"G_grad: {G_grad:.2f}, ",
+                    f"E_grad: {E_grad:.2f}",
                 )
 
                 ### Aggregate all the loss values for each timestep, record separately for each
-                self.train_losses.append((self.step, prior_loss.item(), recon_loss.item(),
-                                          latent_cycle_loss.item()))
+                self.train_losses.append((self.step, prior_loss.item(), mmd_loss.item(),
+                                          recon_loss.item(), latent_cycle_loss.item(), loss.item()))
                 self.step += 1
 
                 ### Periodically run evaluation metrics on the validation data set, always on the last iter
