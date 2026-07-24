@@ -448,8 +448,8 @@ class Trainer:
         recon_loss = F.l1_loss(x_hat, x_real)
         set_requires_grad(self.generator, True)  # Unfreeze the generator model parameters
 
-        E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
-        # E_loss = (0.1 * adv_loss) + (2.0 * latent_cycle_loss) + (0.8 * latent_reg) + (0.2 * recon_loss)
+        # E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
+        E_loss = (1.0 * adv_loss) + (1.0 * latent_cycle_loss) + (1.0 * latent_reg) + (0.3 * recon_loss)
 
         if self.step % 100 == 0:
             print(f"\nEncoder Losses - Step: {self.step}")
