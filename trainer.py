@@ -110,17 +110,26 @@ class Trainer:
         self.image_dim = config["models"]["image_dim"]
         self.num_classes = config["models"]["num_classes"]
 
-        ### Set up folders for the output (samples images), losses, and model checkpoints
-        results_folder = os.path.join(CURRENT_DIR, "results", str(config["name"]))
-        self.results_folder = results_folder  # A directory where the checkpoints will be saved
-        self.checkpoints_folder = os.path.join(self.results_folder, "checkpoints")
-        self.losses_folder = os.path.join(self.results_folder, "losses")
-        self.pretrain_losses_folder = os.path.join(self.results_folder, "pretrain_losses")
-        self.pretrain_samples_folder = os.path.join(self.results_folder, "pretrain_samples")
-        self.samples_folder = os.path.join(self.results_folder, "samples")
-        for directory in [self.results_folder, self.checkpoints_folder, self.losses_folder,
-                          self.pretrain_losses_folder, self.pretrain_samples_folder, self.samples_folder]:
-            os.makedirs(directory, exist_ok=True)  # Create the directory if not already there
+        ### Set up directories for the output (samples images), losses, and model checkpoints
+        results_dir = os.path.join(CURRENT_DIR, "results", str(config["name"]))
+        self.results_dir = results_dir  # A directory where the checkpoints and samples are saved
+        self.checkpoints_dir = os.path.join(self.results_dir, "checkpoints")
+        # Directories specific to the pretrain results
+        self.pretrain_losses_dir = os.path.join(self.results_dir, "pretrain_losses")
+        self.pretrain_img_results_dir = os.path.join(self.results_dir, "pretrain_img_results")
+        self.pretrain_samples_dir = os.path.join(self.pretrain_img_results_dir, "samples")
+        self.pretrain_recon_dir = os.path.join(self.pretrain_img_results_dir, "reconstructions")
+        # Directories specific to the regular training results
+        self.losses_dir = os.path.join(self.results_dir, "losses")
+        self.img_results_dir = os.path.join(self.results_dir, "img_results")
+        self.samples_dir = os.path.join(self.img_results_dir, "samples")
+        self.recon_dir = os.path.join(self.img_results_dir, "reconstructions")
+
+        for directory in [
+            self.results_dir, self.checkpoints_dir, self.pretrain_losses_dir, self.pretrain_img_results_dir,
+            self.pretrain_samples_dir, self.pretrain_recon_dir, self.losses_dir, self.img_results_dir,
+            self.samples_dir, self.recon_dir]:
+            os.makedirs(directory, exist_ok=True)  # Create the directories needed if not already there
 
         self.class_labels = get_class_labels(config["dataset"])  # A dict mapping int:str for each class label
 
@@ -140,7 +149,7 @@ class Trainer:
 
         # Log to file
         file_handler = logging.FileHandler(
-            os.path.join(self.results_folder, "train.log"),
+            os.path.join(self.results_dir, "train.log"),
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
@@ -231,7 +240,7 @@ class Trainer:
         """
         Loads in weights and optimizer states cached to disk of the latest checkpoint if called.
         """
-        all_checkpoints = os.listdir(self.checkpoints_folder)  # Get all files listed in the directory
+        all_checkpoints = os.listdir(self.checkpoints_dir)  # Get all files listed in the directory
         # Split into pretrain and non-pretrain checkpoints
         pretrain_checkpoints = [x for x in all_checkpoints if x.startswith("pretrain-model")
                                 and x.endswith(".pt")]
@@ -263,7 +272,7 @@ class Trainer:
         :returns: None. Writes the weights and losses to disk.
         """
         file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
-        checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
+        checkpoint_path = os.path.join(self.checkpoints_dir, file_name)
         self.logger.info(f"Saving model to {checkpoint_path}.")
         data = {"step": self.step}
         for model in self.models:
@@ -284,13 +293,13 @@ class Trainer:
 
         # Convert the train losses to a pd.DataFrame and save down the results
         df = pd.DataFrame(self.train_losses, columns=train_loss_cols)
-        losses_folder = self.pretrain_losses_folder if pretrain else self.losses_folder
-        df.to_csv(os.path.join(losses_folder, f"train-losses-{milestone}.csv"))
+        losses_dir = self.pretrain_losses_dir if pretrain else self.losses_dir
+        df.to_csv(os.path.join(losses_dir, f"train-losses-{milestone}.csv"))
 
         # Convert the validation losses to a pd.DataFrame and save down the results
         if len(self.val_losses) > 0:
             df = pd.DataFrame(self.val_losses, columns=val_loss_cols)
-            df.to_csv(os.path.join(self.losses_folder, f"val-losses-{milestone}.csv"))
+            df.to_csv(os.path.join(self.losses_dir, f"val-losses-{milestone}.csv"))
 
     def load(self, milestone: int, pretrain: bool = False, weights_only: bool = False) -> None:
         """
@@ -302,7 +311,7 @@ class Trainer:
         :returns: None. Weights are loaded into the model.
         """
         file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
-        checkpoint_path = os.path.join(self.checkpoints_folder, file_name)
+        checkpoint_path = os.path.join(self.checkpoints_dir, file_name)
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
         self.logger.info(f"Loading model from {checkpoint_path}.")
 
@@ -691,11 +700,14 @@ class Trainer:
                     with torch.no_grad():  # Compute without gradient tracking
                         self.generate_samples(pretrain=True)  # Generate some samples using random z-values
                         # Also save samples of reconstructed images i.e. G(E(x_real))
-                        file_name = f"reconstructions-{self.step}.png"
                         titles = class_id[:40].detach().cpu().tolist()
                         titles = [f"{i} {self.class_labels[i]}" for i in titles]
+                        file_name = f"reconstructions-{self.step}.png"
                         save_images(x_hat[:40].detach().cpu(), titles, 5,
-                                    os.path.join(self.pretrain_samples_folder, file_name))
+                                    os.path.join(self.pretrain_recon_dir, file_name))
+                        file_name = "reconstructions-latest.png"
+                        save_images(x_hat[:40].detach().cpu(), titles, 5,
+                                    os.path.join(self.pretrain_img_results_dir, file_name))
                         # Print some diagnostic stats on how the encoder outputs look
                         print(f"Avg L2 Norm (z - z_cycle): {(z - z_cycle).norm(dim=1).mean():.2f}")
                         print(f"mean_loss: {mean_loss:.3f}, std_loss: {std_loss:.3f}")
@@ -709,7 +721,7 @@ class Trainer:
                     # the next save
                     self.train_losses, self.val_losses = [], []
                     # Generate new loss plots after saving additional loss data to disk
-                    generate_loss_plots(self.pretrain_losses_folder, self.pretrain_samples_folder)
+                    generate_loss_plots(self.pretrain_losses_dir, self.pretrain_img_results_dir)
                     torch.cuda.empty_cache()
                     gc.collect()  # This will slow down training if called too often
 
@@ -799,7 +811,7 @@ class Trainer:
                     # the next save
                     self.train_losses, self.val_losses = [], []
                     # Generate new loss plots after saving additional loss data to disk
-                    generate_loss_plots(self.losses_folder, self.results_folder)
+                    generate_loss_plots(self.losses_dir, self.img_results_dir)
                     torch.cuda.empty_cache()
                     gc.collect()  # This will slow down training if called too often
 
@@ -832,8 +844,11 @@ class Trainer:
         z = torch.randn(len(class_id), self.z_dim, device=self.device, generator=rng)  # (B, z_dim)
         x_fake = self.generator(z, class_id)  # Compute G(z) i.e. the synthetic images
         # Save down the results to a grid of images, one for each image class
-        samples_folder = self.pretrain_samples_folder if pretrain else self.samples_folder
-        save_images(x_fake, titles, 5, os.path.join(samples_folder, f"sample-{self.step}.png"))
+        # Save a copy to both the samples sub-directory and also the main directory to retain the latest
+        samples_dir = self.pretrain_samples_dir if pretrain else self.samples_dir
+        save_images(x_fake, titles, 5, os.path.join(samples_dir, f"samples-{self.step}.png"))
+        img_results_dir = self.pretrain_img_results_dir if pretrain else self.img_results_dir
+        save_images(x_fake, titles, 5, os.path.join(img_results_dir, "samples-latest.png"))
 
         self.generator.train()
 
@@ -891,11 +906,15 @@ class Trainer:
             break  # Stop after we grab the first batch in the val dataloader
         x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, 64, 64)
         class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
-        file_name = f"reconstructions-{self.step}.png"
         titles = class_id[:20].detach().cpu().tolist()
         titles = [f"{i} {self.class_labels[i]}" for i in titles]
         x_hat = self.generator(self.encoder(x_real, class_id), class_id)
-        save_images(x_hat[:20].detach().cpu(), titles, 5, os.path.join(self.samples_folder, file_name))
+        # Save a copy to both the reconstructions sub-directory and also the main img_results_dir
+        file_name = f"reconstructions-{self.step}.png"
+        save_images(x_hat[:20].detach().cpu(), titles, 5,
+                    os.path.join(self.recon_dir, file_name))
+        save_images(x_hat[:20].detach().cpu(), titles, 5,
+                    os.path.join(self.img_results_dir, "reconstructions-latest"))
 
         for model in self.models:  # Switch all models back to train mode
             model.train()
