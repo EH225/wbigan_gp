@@ -350,8 +350,6 @@ class Trainer:
                 milestone = max([int(x.replace("post-train-model-", "").replace(".pt", ""))
                                  for x in post_train_checkpoints if x.endswith(".pt")])
             file_name = f"post-train-model-{milestone}.pt"
-        else:
-            raise ValueError(f"training_stage={training_stage} not recognized")
 
         if file_name is None:  # If no file_name, return None and do nothing, nothing to load
             return
