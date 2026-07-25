@@ -311,7 +311,7 @@ class Trainer:
             df = pd.DataFrame(self.val_losses, columns=val_loss_cols)
             df.to_csv(os.path.join(self.losses_dir, f"val-losses-{milestone}.csv"))
 
-    def load(self, milestone: int = None, training_stage: str = "train") -> None:
+    def load(self, milestone: int = None, training_stage: str = "train", load_opt_wts: bool = True) -> None:
         """
         Loads in the cached weights and training state from disk for a particular milestone.
 
@@ -362,7 +362,8 @@ class Trainer:
         self.step = checkpoint_data["step"]
         for model in self.models:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
-            getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
+            if load_opt_wts is True:
+                getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
 
         if self.scaler is not None and "scaler" in checkpoint_data:
             self.scaler.load_state_dict(checkpoint_data["scaler"])
@@ -713,7 +714,7 @@ class Trainer:
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params to overwrite them
         if config_dict.get("use_latest_checkpoint", True):  # Load the latest pretrain checkpoint if any
-            self.load(None, "pretrain")
+            self.load(None, "pretrain", True)
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
@@ -835,12 +836,11 @@ class Trainer:
         self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):  # First load in the latest pretrain weights
             # if there are any, this will allow self.train() to continue where pre-training left off
-            self.load(None, "pretrain")
+            self.load(None, "pretrain", False)
             self.step = 0  # Reset the step counter once we move to training
-        self.create_optimizers(config_dict)  # Init optimizers again to clear any loaded weights
         if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-created,
             # attempt to load in the latest model checkpoint if there is one
-            self.load(None, "train")
+            self.load(None, "train", True)
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
@@ -926,12 +926,12 @@ class Trainer:
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):  # Load in the latest model weights and opt wts
-            self.load(None, "train")
+            self.load(None, "train", False)
             self.step = 0  # Reset the step counter once we move to training
         self.create_optimizers(config_dict)  # Init optimizers again to clear any loaded weights
-        if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-created,
+        if config_dict.get("use_latest_checkpoint", True):  # Onc0e the optimizers have been re-created,
             # attempt to load in the latest model checkpoint if there is one
-            self.load(None, "post_train")
+            self.load(None, "post_train", True)
 
         self.logger.info(f"Starting Post-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         self.logger.info(self.encoder.name)
@@ -939,11 +939,12 @@ class Trainer:
             self.logger.info(f"lr={param_group['lr']}, wd={param_group['weight_decay']}")
             break  # Show for only the first parameter group, assume all are the same
         self.encoder.to(self.device)  # Move the model to the correct device if not already there
+        set_requires_grad(self.encoder, True)  # Make sure to track E gradients
         self.encoder.train()  # Make sure to set the model to train mode for training
 
         self.generator.to(self.device)  # Move the model to the correct device if not already there
+        set_requires_grad(self.generator, False)  # Do on track G gradients
         self.generator.eval()  # This model will be frozen while we post-train the encoder
-        set_requires_grad(self.generator, False)
 
         inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
         inf_val_dataloader = infinite_loader(self.val_dataloader)  # This does not cache batches
@@ -960,8 +961,8 @@ class Trainer:
 
                 # Report all the losses during training
                 pbar.set_postfix_str(
-                    f"E_grad={E_grad:.3f}" + ", ".join([f"{loss_name}: {loss_val.item(): .2f}"
-                                                        for loss_name, loss_val in losses.items()]))
+                    f"E_grad={E_grad:.3f}  " + ", ".join([f"{loss_name}: {loss_val.item():.2f}"
+                                                          for loss_name, loss_val in losses.items()]))
 
                 ### log all the losses
                 self.train_losses.append([self.step] + [loss_val.item() for loss_val in losses.values()])
