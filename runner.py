@@ -59,6 +59,29 @@ def run_training(config_name: str, datasets_dir: str, **kwargs) -> None:
     trainer.train(**kwargs)
 
 
+def run_post_training(config_name: str, datasets_dir: str, **kwargs) -> None:
+    """
+    This helper function runs post-training of the encoder for a given config file specified by
+    config_name. This function:
+        1. Reads in the config file as a dict
+        2. Builds the train and val dataloaders
+        3. Constructs the Trainer obj
+        4. Run the post-training loop by calling trainer.post_train()
+
+    :param config_name: The name of the config file to use for running training.
+    :param datasets_dir: The directory where the datasets are stored, typically called "datasets".
+    :return: None.
+    """
+    config = read_yaml(os.path.join(CURRENT_DIR, "config", f"{config_name}.yml"))
+    dataloaders = {
+        "train": get_dataloader(datasets_dir, config["dataset"], "train",
+                                config["training"].get("batch_size", 64)),
+        "val": get_dataloader(datasets_dir, config["dataset"], "val",
+                              config["training"].get("batch_size", 64))}
+    trainer = Trainer(config=config, dataloaders=dataloaders)
+    trainer.post_train(**kwargs)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run WBi-GAN training loop",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)

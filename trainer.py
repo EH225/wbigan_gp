@@ -490,7 +490,7 @@ class Trainer:
         return E_loss
 
     @compute_with_amp
-    def compute_post_train_E_loss(self, batch: Dict) -> Dict[str: torch.Tensor]:
+    def compute_post_train_E_loss(self, batch: Dict) -> Dict[str, torch.Tensor]:
         """
         Computes the encoder loss (E_loss).
             1. Zeros the encoder optimizer gradients
@@ -895,7 +895,7 @@ class Trainer:
                 del batch, G_loss, E_loss, D_loss
                 pbar.update(1)
 
-    def post_training(self) -> None:
+    def post_train(self) -> None:
         """
         This method is for running encoder post-training to improve its expressiveness and ability to create
         high-quality re-constructions.
