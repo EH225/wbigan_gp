@@ -964,29 +964,29 @@ class Trainer:
                 ### Periodically generate some reconstructions to test the power of the encoder
                 if self.step % self.eval_every == 0 or self.step == self.num_steps:
                     batch = next(inf_val_dataloader)
-                x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, img_size, img_size)
-                class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
-                x_real, class_id = x_real[:40], class_id[:40]  # Limit to just the first 40 in this batch
-                self.encoder.eval()
-                with torch.no_grad():  # Compute and save a batch of reconstructed val set images
-                    x_hat = self.generator(self.encoder(x_real, class_id), class_id)  # (B, 3, H, W)
-                titles = class_id.detach().cpu().tolist()
-                titles = [f"{i} {self.class_labels[i]}" for i in titles]
-                file_name = f"reconstructions-{self.step}.png"
-                save_images(x_hat.detach().cpu(), titles, 5,
-                            os.path.join(self.pretrain_recon_dir, file_name))
-                self.encoder.train()
+                    x_real = batch["image"].to(self.device, non_blocking=True)  # (B, 3, img_size, img_size)
+                    class_id = batch["class_id"].to(self.device, non_blocking=True)  # (B, 1)
+                    x_real, class_id = x_real[:40], class_id[:40]  # Limit to just the first 40 in this batch
+                    self.encoder.eval()
+                    with torch.no_grad():  # Compute and save a batch of reconstructed val set images
+                        x_hat = self.generator(self.encoder(x_real, class_id), class_id)  # (B, 3, H, W)
+                    titles = class_id.detach().cpu().tolist()
+                    titles = [f"{i} {self.class_labels[i]}" for i in titles]
+                    file_name = f"reconstructions-{self.step}.png"
+                    save_images(x_hat.detach().cpu(), titles, 5,
+                                os.path.join(self.post_train_img_results_dir, file_name))
+                    self.encoder.train()
 
                 ### Periodically save the model weights to disk, always on the last iter too
                 if self.step % self.save_every == 0 or self.step == self.num_steps:
                     self.save(self.step, "post_train")
-                # Clear the list of losses after each save, store only the ones from the last save to
-                # the next save
-                self.train_losses = []
-                # Generate new loss plots after saving additional loss data to disk
-                generate_loss_plots(self.post_train_losses_dir, self.post_train_img_results_dir)
-                torch.cuda.empty_cache()
-                gc.collect()  # This will slow down training if called too often
+                    # Clear the list of losses after each save, store only the ones from the last save to
+                    # the next save
+                    self.train_losses = []
+                    # Generate new loss plots after saving additional loss data to disk
+                    generate_loss_plots(self.post_train_losses_dir, self.post_train_img_results_dir)
+                    torch.cuda.empty_cache()
+                    gc.collect()  # This will slow down training if called too often
 
                 del batch, losses, E_grad
                 pbar.update(1)
