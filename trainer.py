@@ -130,8 +130,8 @@ class Trainer:
         self.samples_dir = os.path.join(self.img_results_dir, "samples")
         self.recon_dir = os.path.join(self.img_results_dir, "reconstructions")
         # Directories specific to pos-training
-        self.post_train_losses_dir = os.path.join(self.results_dir, "losses")
-        self.post_train_img_results_dir = os.path.join(self.results_dir, "img_results")
+        self.post_train_losses_dir = os.path.join(self.results_dir, "post_train_losses")
+        self.post_train_img_results_dir = os.path.join(self.results_dir, "post_train_img_results")
 
         for directory in [
             self.results_dir, self.checkpoints_dir, self.pretrain_losses_dir, self.pretrain_img_results_dir,
@@ -928,6 +928,7 @@ class Trainer:
         for i, param_group in enumerate(self.opt_encoder.param_groups):
             self.logger.info(f"lr={param_group['lr']}, wd={param_group['weight_decay']}")
             break  # Show for only the first parameter group, assume all are the same
+
         self.encoder.to(self.device)  # Move the model to the correct device if not already there
         set_requires_grad(self.encoder, True)  # Make sure to track E gradients
         self.encoder.train()  # Make sure to set the model to train mode for training
@@ -955,7 +956,8 @@ class Trainer:
                 # Report all the losses during training
                 pbar.set_postfix_str(
                     f"E_grad={E_grad:.3f}  " + ", ".join([f"{loss_name}: {loss_val.item():.2f}"
-                                                          for loss_name, loss_val in losses.items()]))
+                                                          for loss_name, loss_val in losses.items()])
+                )
 
                 ### log all the losses
                 self.train_losses.append([self.step] + [loss_val.item() for loss_val in losses.values()])
