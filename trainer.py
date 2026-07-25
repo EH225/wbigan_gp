@@ -174,16 +174,16 @@ class Trainer:
         self.logger.info(f"z_dim: {self.z_dim}, image_dim: {self.image_dim}, num_classes: {self.num_classes}")
 
         ### Configure the 3 models used in Bi-GAN training
+        self.device = get_device()  # Auto-detect what device to use for training
         self.generator = Generator(self.z_dim, self.image_dim, self.num_classes)
         self.encoder = Encoder(self.z_dim, self.image_dim, self.num_classes)
         self.discriminator = Discriminator(self.z_dim, self.image_dim, self.num_classes)
         self.models = [self.generator, self.encoder, self.discriminator]
         for model in self.models:  # Report the number of trainable parameters in each model
             self.logger.info(f"{model.name}: {sum(p.numel() for p in model.parameters())} parameters")
+            model.to(self.device)
 
         ### Set up other training variables required
-        self.device = get_device()  # Auto-detect what device to use for training
-        # Save a pointers to the train and validation dataloaders
         self.train_dataloader = dataloaders["train"]
         self.val_dataloader = dataloaders["val"]
         self.step = 0  # Training step counter, will train until this reaches num_steps
@@ -247,15 +247,6 @@ class Trainer:
 
         # Create 1 grad scaler for all models to use
         self.scaler = torch.amp.GradScaler("cuda") if self.amp_dtype == torch.float16 else None
-
-        # Move the models and optimizers to the same device for training or inference
-        for model in self.models:
-            getattr(self, model.name).to(self.device)  # Move the model to the correct device
-            # Move the optimizer parameters to the correct device
-            for state in getattr(self, f"opt_{model.name}").state.values():
-                for k, v in state.items():
-                    if torch.is_tensor(v):
-                        state[k] = v.to(self.device)
 
     def save(self, milestone: int, training_stage: str = "train") -> None:
         """
