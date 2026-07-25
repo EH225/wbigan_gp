@@ -1,5 +1,5 @@
 # This config file the config for training a Wasserstein Bi-GAN on the CIFAR-10 dataset
-name: cifar10_wigan
+name: cifar10_wbigan
 dataset: cifar10
 
 models: # Define model parameters

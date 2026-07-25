@@ -69,12 +69,17 @@ def set_requires_grad(module: nn.Module, requires_grad: bool) -> None:
         p.requires_grad_(requires_grad)
 
 
-def compute_mmd(x, y, sigmas=(1, 2, 4, 8, 16)):
+def compute_mmd(x: torch.Tensor, y: torch.Tensor, sigmas: Tuple[int] = (1, 2, 4, 8, 16)) -> torch.Tensor:
     """
-    x: (B, D) encoder outputs
-    y: (B, D) prior samples
-    """
+    Computes a Maximum Mean Discrepancy (MMD) loss, which is a metric that measures the difference between
+    two probability distributions. Unlike KL, it is a differentiable objective in and can be used to align
+    distributions without estimating probability density functions.
 
+    param x: (B, z_dim) encoder outputs (z_pred).
+    param y: (B, z_dim) prior samples (z).
+    param sigmas: A tuple of sigmas to use i.e. varying kernel bandwidths.
+    :returns: A mmd loss that is the sum across all sigma params provided.
+    """
     xx = torch.cdist(x, x).pow(2)
     yy = torch.cdist(y, y).pow(2)
     xy = torch.cdist(x, y).pow(2)
@@ -180,6 +185,10 @@ class Trainer:
         self.val_dataloader = dataloaders["val"]
         self.step = 0  # Training step counter, will train until this reaches num_steps
         self.train_losses, self.val_losses = [], []  # Aggregate loss values during training
+
+        config_dict = self.config["training"]  # Use the Bi-GAN training config settings as the default
+        self.extract_config_params(config_dict)  # Set param values as attributes of self
+        self.create_optimizers(config_dict)  # Init optimizers with config params
 
     def extract_config_params(self, config_dict: dict) -> None:
         """
@@ -398,7 +407,8 @@ class Trainer:
         z_pred = self.encoder(x_real, class_id)
         set_requires_grad(self.encoder, True)  # Unfreeze the parameters after editing
         recon_loss = F.l1_loss(self.generator(z_pred, class_id), x_real)
-        G_loss = 1.0 * adv_loss + 0.5 * recon_loss
+        # G_loss = 1.0 * adv_loss + 0.5 * recon_loss
+        G_loss = 1.0 * adv_loss + 0.1 * recon_loss
 
         if self.step % 100 == 0:
             print(f"\nGenerator Losses - Step: {self.step}")
@@ -449,7 +459,8 @@ class Trainer:
         set_requires_grad(self.generator, True)  # Unfreeze the generator model parameters
 
         # E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
-        E_loss = (1.0 * adv_loss) + (1.0 * latent_cycle_loss) + (1.0 * latent_reg) + (0.3 * recon_loss)
+        # E_loss = (1.0 * adv_loss) + (1.0 * latent_cycle_loss) + (1.0 * latent_reg) + (0.3 * recon_loss)
+        E_loss = (1.0 * adv_loss) + (0.1 * latent_cycle_loss) + (0.1 * latent_reg) + (0.1 * recon_loss)
 
         if self.step % 100 == 0:
             print(f"\nEncoder Losses - Step: {self.step}")
