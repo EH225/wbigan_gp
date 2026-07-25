@@ -347,7 +347,7 @@ class Trainer:
         # Losses are not loaded in, they are saved to disk periodically with the model weights and are not
         # needed to continue training. The losses obtained by training will be cached again at the next save
 
-        # Move the models and optimizers to the same device to continue training or for inference
+        # Move the models and optimizers to the same device for training or inference
         for model in self.models:
             getattr(self, model.name).to(self.device)  # Move the model to the correct device
             # Move the optimizer parameters to the correct device
@@ -688,9 +688,9 @@ class Trainer:
         """
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
-        if config_dict.get("use_latest_checkpoint", True):  # Load the latest train checkpoint if any
-            self.load(None, "train")
         self.create_optimizers(config_dict)  # Init optimizers with config params to overwrite them
+        if config_dict.get("use_latest_checkpoint", True):  # Load the latest pretrain checkpoint if any
+            self.load(None, "pretrain")
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
@@ -900,8 +900,11 @@ class Trainer:
         config_dict = self.config["post_training"]  # Use the Bi-GAN post-training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):
-            self.load_latest_checkpoint(pretrain=False)
+        if config_dict.get("use_latest_checkpoint", True):  # Load in the latest model weights and opt wts
+            self.load(None, "train")
+        if self.config["training"]["num_steps"] == self.step:  # If we're just starting off with post-training
+            # then re-init the optimizers so that the config parameters overwrite the existing ones
+            self.create_optimizers(config_dict)
 
         self.logger.info(f"Starting Post-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         self.logger.info(self.encoder.name)
