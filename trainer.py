@@ -248,39 +248,13 @@ class Trainer:
         # Create 1 grad scaler for all models to use
         self.scaler = torch.amp.GradScaler("cuda") if self.amp_dtype == torch.float16 else None
 
-    def load_latest_checkpoint(self, pretrain: bool = False) -> None:
-        """
-        Loads in weights and optimizer states cached to disk of the latest checkpoint if called.
-        """
-        all_checkpoints = os.listdir(self.checkpoints_dir)  # Get all files listed in the directory
-        # Split into pretrain and non-pretrain checkpoints
-        pretrain_checkpoints = [x for x in all_checkpoints if x.startswith("pretrain-model")
-                                and x.endswith(".pt")]
-        model_checkpoints = [x for x in all_checkpoints if x.startswith("model") and x.endswith(".pt")]
-
-        # If there are any prior checkpoints, attempt to load the latest one
-        if pretrain and len(pretrain_checkpoints) > 0:
-            last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
-                                   for x in pretrain_checkpoints if x.endswith(".pt")])
-            self.load(last_checkpoint, True, False)
-
-        elif len(all_checkpoints) > 0:  # Load model checkpoints first, if none, then load pretrained instead
-            if len(model_checkpoints) > 0:
-                last_checkpoint = max([int(x.replace("model-", "").replace(".pt", ""))
-                                       for x in model_checkpoints if x.endswith(".pt")])
-                self.load(last_checkpoint, False, False)
-
-            elif len(pretrain_checkpoints) > 0:
-                last_checkpoint = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
-                                       for x in pretrain_checkpoints if x.endswith(".pt")])
-                self.load(last_checkpoint, True, True)
-
     def save(self, milestone: int, training_stage: str = "train") -> None:
         """
         Saves the weights and training state of the models for the current milestone.
 
         :param milestone: An integer denoting the training timestep at which the model weights were saved.
-        :param pretrain: A bool flag indicating if this milestone is a pretraining milestone.
+        :param training_stage: The training stage of the model i.e. pretrain, train, or post_train. This
+            determines where loss values are saved.
         :returns: None. Writes the weights and losses to disk.
         """
         if training_stage == "pretrain":
@@ -306,11 +280,11 @@ class Trainer:
             train_loss_cols = ["step", "G_loss", "E_loss", "D_loss", "D_loss_real", "D_loss_fake",
                                "grad_penalty"]
             val_loss_cols = ["step", "E_avg", "E_std", "E_NLL", "D_real", "D_fake"]
-            losses_dir = self.train_loss_cols
+            losses_dir = self.losses_dir
         elif training_stage == "post_train":
             train_loss_cols = ["step", "E_loss", "recon_loss", "latent_reg", "latent_cycle_loss"]
             val_loss_cols = []
-            losses_dir = self.post_train_loss_cols
+            losses_dir = self.post_train_losses_dir
         else:
             raise ValueError(f"training_stage={training_stage} not recognized")
 
@@ -323,30 +297,49 @@ class Trainer:
             df = pd.DataFrame(self.val_losses, columns=val_loss_cols)
             df.to_csv(os.path.join(self.losses_dir, f"val-losses-{milestone}.csv"))
 
-    def load(self, milestone: int, pretrain: bool = False, weights_only: bool = False) -> None:
+    def load(self, milestone: int = None, training_stage: str = "train") -> None:
         """
         Loads in the cached weights and training state from disk for a particular milestone.
 
         :param milestone: An integer denoting the training timestep at which the model weights were saved.
-        :param pretrain: A bool flag indicating if this milestone is a pretraining milestone.
-        :param weights_only: If True, then only model weights are loaded, nothing else.
-        :returns: None. Weights are loaded into the model.
+            If none, then the latest milestone is auto-detected and used.
+        :param training_stage: The training stage of the model i.e. pretrain, train, or post_train. This
+            determines where loss values are saved.
+        :returns: None. Weights are loaded into the models and optimizers.
         """
-        file_name = f"pretrain-model-{milestone}.pt" if pretrain else f"model-{milestone}.pt"
+        all_checkpoints = os.listdir(self.checkpoints_dir)  # Get all files listed in the directory
+        # Split into pretrain and non-pretrain checkpoints
+        pretrain_checkpoints = [x for x in all_checkpoints if x.startswith("pretrain-model")
+                                and x.endswith(".pt")]
+        model_checkpoints = [x for x in all_checkpoints if x.startswith("model") and x.endswith(".pt")]
+
+        file_name = None
+        if training_stage == "pretrain" and len(pretrain_checkpoints) > 0:
+            # Load the specified (or latest) pretrain milestone, do nothing if no checkpoints
+            if milestone is None:  # If not specified, then default to the latest in the directory
+                milestone = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
+                                 for x in pretrain_checkpoints if x.endswith(".pt")])
+            file_name = f"pretrain-model-{milestone}.pt"
+
+        elif training_stage in ["train", "post_train"] and len(model_checkpoints) > 0:
+            # Load the specified (or latest) train milestone, do nothing if no checkpoints
+            if milestone is None:  # If not specified, then default to the latest in the directory
+                milestone = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
+                                 for x in pretrain_checkpoints if x.endswith(".pt")])
+            file_name = f"model-{milestone}.pt"
+
+        if file_name is None:  # If no file_name, return None and do nothing, nothing to load
+            return
+
+        # Load the checkpoint data
         checkpoint_path = os.path.join(self.checkpoints_dir, file_name)
         checkpoint_data = torch.load(checkpoint_path, map_location=self.device)
         self.logger.info(f"Loading model from {checkpoint_path}.")
 
-        if weights_only:
-            self.logger.info("Loading only model weights, leaving all else as default")
-            for model in self.models:
-                getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
-
-        else:  # Load everything from the checkpoint, step counter, model weights, opt state, scaler
-            self.step = checkpoint_data["step"]
-            for model in self.models:
-                getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
-                getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
+        self.step = checkpoint_data["step"]
+        for model in self.models:
+            getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
+            getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
 
             if self.scaler is not None and "scaler" in checkpoint_data:
                 self.scaler.load_state_dict(checkpoint_data["scaler"])
@@ -695,9 +688,9 @@ class Trainer:
         """
         config_dict = self.config["pretraining"]  # Use the pretraining config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
-        self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):
-            self.load_latest_checkpoint(pretrain=True)
+        if config_dict.get("use_latest_checkpoint", True):  # Load the latest train checkpoint if any
+            self.load(None, "train")
+        self.create_optimizers(config_dict)  # Init optimizers with config params to overwrite them
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
@@ -816,9 +809,13 @@ class Trainer:
         """
         config_dict = self.config["training"]  # Use the Bi-GAN training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
+        if config_dict.get("use_latest_checkpoint", True):  # First load in the latest pretrain weights
+            # if there are any, this will allow self.train() to continue where pre-training left off
+            self.load(None, "pretrain")
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):
-            self.load_latest_checkpoint(pretrain=False)
+        if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-defined,
+            # attempt to load in the latest model checkpoint if there is one
+            self.load(None, "train")
 
         if new_lr is not None:  # If provided, update the learning rates of all models before training
             self.update_lr(new_lr)
