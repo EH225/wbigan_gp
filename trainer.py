@@ -916,12 +916,11 @@ class Trainer:
         config_dict = self.config["post_training"]  # Use the Bi-GAN post-training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
         self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):  # Load in the latest model weights and opt wts
+        if config_dict.get("use_latest_checkpoint", True):  # Load in the latest train weights
             self.load(None, "train", False)
-            self.step = 0  # Reset the step counter once we move to training
-        self.create_optimizers(config_dict)  # Init optimizers again to clear any loaded weights
-        if config_dict.get("use_latest_checkpoint", True):  # Onc0e the optimizers have been re-created,
-            # attempt to load in the latest model checkpoint if there is one
+            self.step = 0  # Reset the step counter once we move to post-training
+        if config_dict.get("use_latest_checkpoint", True):  # If there is a post-training checkpoint,
+            # attempt to load in the latest one if one exists
             self.load(None, "post_train", True)
 
         self.logger.info(f"Starting Post-Training, device={self.device}, amp_dtype={self.amp_dtype}")
@@ -936,6 +935,9 @@ class Trainer:
         self.generator.to(self.device)  # Move the model to the correct device if not already there
         set_requires_grad(self.generator, False)  # Do on track G gradients
         self.generator.eval()  # This model will be frozen while we post-train the encoder
+
+        set_requires_grad(self.discriminator, False)  # Do on track D gradients
+        self.discriminator.eval()  # This model will be frozen while we post-train the encoder
 
         inf_dataloader = infinite_loader(self.train_dataloader)  # This does not cache batches
         inf_val_dataloader = infinite_loader(self.val_dataloader)  # This does not cache batches
