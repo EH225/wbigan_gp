@@ -9,8 +9,6 @@ sys.path.insert(0, PARENT_DIR)
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_models.shared_components import SelfAttention
 import numpy as np
 
 
