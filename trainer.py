@@ -248,6 +248,15 @@ class Trainer:
         # Create 1 grad scaler for all models to use
         self.scaler = torch.amp.GradScaler("cuda") if self.amp_dtype == torch.float16 else None
 
+        # Move the models and optimizers to the same device for training or inference
+        for model in self.models:
+            getattr(self, model.name).to(self.device)  # Move the model to the correct device
+            # Move the optimizer parameters to the correct device
+            for state in getattr(self, f"opt_{model.name}").state.values():
+                for k, v in state.items():
+                    if torch.is_tensor(v):
+                        state[k] = v.to(self.device)
+
     def save(self, milestone: int, training_stage: str = "train") -> None:
         """
         Saves the weights and training state of the models for the current milestone.
@@ -259,8 +268,13 @@ class Trainer:
         """
         if training_stage == "pretrain":
             file_name = f"pretrain-model-{milestone}.pt"
-        else:
+        elif training_stage == "train":
             file_name = f"model-{milestone}.pt"
+        elif training_stage == "post_train":
+            file_name = f"post-train-model-{milestone}.pt"
+        else:
+            raise ValueError(f"training_stage={training_stage} not recognized")
+
         checkpoint_path = os.path.join(self.checkpoints_dir, file_name)
         self.logger.info(f"Saving model to {checkpoint_path}.")
         data = {"step": self.step}
@@ -312,6 +326,8 @@ class Trainer:
         pretrain_checkpoints = [x for x in all_checkpoints if x.startswith("pretrain-model")
                                 and x.endswith(".pt")]
         model_checkpoints = [x for x in all_checkpoints if x.startswith("model") and x.endswith(".pt")]
+        post_train_checkpoints = [x for x in all_checkpoints if x.startswith("post-train-model")
+                                  and x.endswith(".pt")]
 
         file_name = None
         if training_stage == "pretrain" and len(pretrain_checkpoints) > 0:
@@ -321,12 +337,21 @@ class Trainer:
                                  for x in pretrain_checkpoints if x.endswith(".pt")])
             file_name = f"pretrain-model-{milestone}.pt"
 
-        elif training_stage in ["train", "post_train"] and len(model_checkpoints) > 0:
+        elif training_stage == "train" and len(model_checkpoints) > 0:
             # Load the specified (or latest) train milestone, do nothing if no checkpoints
             if milestone is None:  # If not specified, then default to the latest in the directory
-                milestone = max([int(x.replace("pretrain-model-", "").replace(".pt", ""))
-                                 for x in pretrain_checkpoints if x.endswith(".pt")])
+                milestone = max([int(x.replace("model-", "").replace(".pt", ""))
+                                 for x in model_checkpoints if x.endswith(".pt")])
             file_name = f"model-{milestone}.pt"
+
+        elif training_stage == "post_train" and len(post_train_checkpoints) > 0:
+            # Load the specified (or latest) post-train milestone, do nothing if no checkpoints
+            if milestone is None:  # If not specified, then default to the latest in the directory
+                milestone = max([int(x.replace("post-train-model-", "").replace(".pt", ""))
+                                 for x in post_train_checkpoints if x.endswith(".pt")])
+            file_name = f"post-train-model-{milestone}.pt"
+        else:
+            raise ValueError(f"training_stage={training_stage} not recognized")
 
         if file_name is None:  # If no file_name, return None and do nothing, nothing to load
             return
@@ -341,8 +366,8 @@ class Trainer:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
             getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
 
-            if self.scaler is not None and "scaler" in checkpoint_data:
-                self.scaler.load_state_dict(checkpoint_data["scaler"])
+        if self.scaler is not None and "scaler" in checkpoint_data:
+            self.scaler.load_state_dict(checkpoint_data["scaler"])
 
         # Losses are not loaded in, they are saved to disk periodically with the model weights and are not
         # needed to continue training. The losses obtained by training will be cached again at the next save
@@ -809,11 +834,13 @@ class Trainer:
         """
         config_dict = self.config["training"]  # Use the Bi-GAN training config settings
         self.extract_config_params(config_dict)  # Set param values as attributes of self
+        self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):  # First load in the latest pretrain weights
             # if there are any, this will allow self.train() to continue where pre-training left off
             self.load(None, "pretrain")
-        self.create_optimizers(config_dict)  # Init optimizers with config params
-        if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-defined,
+            self.step = 0  # Reset the step counter once we move to training
+        self.create_optimizers(config_dict)  # Init optimizers again to clear any loaded weights
+        if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-created,
             # attempt to load in the latest model checkpoint if there is one
             self.load(None, "train")
 
@@ -902,9 +929,11 @@ class Trainer:
         self.create_optimizers(config_dict)  # Init optimizers with config params
         if config_dict.get("use_latest_checkpoint", True):  # Load in the latest model weights and opt wts
             self.load(None, "train")
-        if self.config["training"]["num_steps"] == self.step:  # If we're just starting off with post-training
-            # then re-init the optimizers so that the config parameters overwrite the existing ones
-            self.create_optimizers(config_dict)
+            self.step = 0  # Reset the step counter once we move to training
+        self.create_optimizers(config_dict)  # Init optimizers again to clear any loaded weights
+        if config_dict.get("use_latest_checkpoint", True):  # Once the optimizers have been re-created,
+            # attempt to load in the latest model checkpoint if there is one
+            self.load(None, "post_train")
 
         self.logger.info(f"Starting Post-Training, device={self.device}, amp_dtype={self.amp_dtype}")
         self.logger.info(self.encoder.name)
@@ -933,8 +962,8 @@ class Trainer:
 
                 # Report all the losses during training
                 pbar.set_postfix_str(
-                    f"E_grad={E_grad:.3f}" + "".join([f"{loss_name}: {loss_val.item(): .2f}"
-                                                      for loss_name, loss_val in losses.items()]))
+                    f"E_grad={E_grad:.3f}" + ", ".join([f"{loss_name}: {loss_val.item(): .2f}"
+                                                        for loss_name, loss_val in losses.items()]))
 
                 ### log all the losses
                 self.train_losses.append([self.step] + [loss_val.item() for loss_val in losses.values()])
