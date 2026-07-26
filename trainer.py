@@ -355,8 +355,9 @@ class Trainer:
             getattr(self, model.name).load_state_dict(checkpoint_data[model.name])  # Model weights
             if load_opt_wts is True:
                 getattr(self, f"opt_{model.name}").load_state_dict(checkpoint_data[f"opt_{model.name}"])
-            else:
-                self.logger.info(f"Loading model weights only, skipping opt weights")
+
+        if load_opt_wts is False:
+            self.logger.info(f"Loading model weights only, skipping opt weights")
 
         if self.scaler is not None and "scaler" in checkpoint_data:
             self.scaler.load_state_dict(checkpoint_data["scaler"])
@@ -433,7 +434,7 @@ class Trainer:
         # G_loss = 1.0 * adv_loss + 0.5 * recon_loss
         G_loss = 1.0 * adv_loss + 0.1 * recon_loss
 
-        if self.step % 100 == 0:
+        if self.step % 500 == 0:
             print(f"\nGenerator Losses - Step: {self.step}")
             print("   ",
                   f"adv_loss={adv_loss.item():.2f}",
@@ -627,7 +628,7 @@ class Trainer:
             grad_penalty = ((grad_norm - 1) ** 2).mean()  # Compute the L2 norm of the gradient
         D_loss += self.lambda_val * grad_penalty
 
-        if self.step % 100 == 0:
+        if self.step % 500 == 0:
             dist = torch.cdist(z_pred, z_pred)
             mask = ~torch.eye(len(z_pred), dtype=torch.bool, device=dist.device)
             mean_dist = dist[mask].mean()
