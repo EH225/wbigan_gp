@@ -482,7 +482,7 @@ class Trainer:
         latent_cycle_loss = F.mse_loss(self.encoder(x_fake, class_id), z)
 
         # Compute the overall E_loss by taking a weighted combination of the various loss components
-        E_loss = (0.05 * adv_loss) + (5.0 * recon_loss) + (0.1 * latent_reg) + (2.0 * latent_cycle_loss)
+        E_loss = (0.01 * adv_loss) + (5.0 * recon_loss) + (0.1 * latent_reg) + (2.0 * latent_cycle_loss)
 
         # E_loss = 0.1 * adv_loss + 5.0 * latent_cycle_loss + 0.8 * latent_reg + 0.1 * recon_loss
         # E_loss = (1.0 * adv_loss) + (1.0 * latent_cycle_loss) + (1.0 * latent_reg) + (0.3 * recon_loss)
