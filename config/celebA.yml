@@ -37,7 +37,7 @@ post_training:
   batch_size: 256
   lr: 1.0e-4
   weight_decay: 0.0e-0
-  num_steps: 20000
+  num_steps: 30000
   adam_betas: [ 0.9, 0.999 ]
   grad_clip: 5.0
   use_amp: True
